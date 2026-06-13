@@ -123,6 +123,39 @@ const first2Class = charClassFromSet(utf8First2Chars);
 const first3Class = charClassFromSet(utf8First3Chars);
 const first4Class = charClassFromSet(utf8First4Chars);
 
+export function utf8MojibakeSequenceLengthAt(text: string, index: number): number {
+  const first = text.codePointAt(index);
+  if (first === undefined) return 0;
+
+  for (const [length, leadChars] of [
+    [4, utf8First4Chars],
+    [3, utf8First3Chars],
+    [2, utf8First2Chars],
+  ] as const) {
+    if (!leadChars.has(first) || index + length > text.length) continue;
+
+    let valid = true;
+    for (let offset = 1; offset < length; offset++) {
+      const cp = text.codePointAt(index + offset);
+      if (cp === undefined || !utf8ContChars.has(cp)) {
+        valid = false;
+        break;
+      }
+    }
+
+    if (valid) return length;
+  }
+
+  return 0;
+}
+
+export function isUtf8MojibakeByteChar(char: string | undefined): boolean {
+  if (char === undefined) return false;
+  const cp = char.codePointAt(0);
+  if (cp === undefined) return false;
+  return utf8ContChars.has(cp) || utf8First2Chars.has(cp) || utf8First3Chars.has(cp) || utf8First4Chars.has(cp);
+}
+
 // Matches sequences that look like UTF-8 bytes decoded as a single-byte encoding
 export const UTF8_DETECTOR_RE = new RegExp(
   `(?<!${contStrictClass})` +
@@ -287,10 +320,13 @@ const HTML_ENTITY_ENTRIES: Array<[string, string]> = [
 export const HTML_ENTITIES = new Map<string, string>();
 for (const [name, char] of HTML_ENTITY_ENTRIES) {
   HTML_ENTITIES.set(`&${name};`, char);
-  // Also support all-uppercase versions, with uppercased character
+  // Also support all-uppercase aliases, preserving the entity's canonical value.
   const upper = name.toUpperCase();
   if (upper !== name) {
-    HTML_ENTITIES.set(`&${upper};`, char.toUpperCase());
+    const upperEntity = `&${upper};`;
+    if (!HTML_ENTITIES.has(upperEntity)) {
+      HTML_ENTITIES.set(upperEntity, char);
+    }
   }
 }
 

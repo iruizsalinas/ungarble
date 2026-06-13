@@ -5,7 +5,7 @@ import {
   type EncodingName,
 } from "./codecs.js";
 import {
-  restoreByteA0, replaceLossySequences, decodeInconsistentUtf8, fixC1Controls,
+  restoreByteA0, replaceLossySequences, decodeInconsistentUtf8, fixBadTokens, fixC1Controls,
 } from "./fixes.js";
 
 export interface ExplanationStep {
@@ -110,6 +110,16 @@ function fixEncodingOneStep(text: string): FixResult {
       return {
         text: fixed,
         steps: [{ action: "apply", detail: "decode_inconsistent_utf8" }],
+      };
+    }
+  }
+
+  if (textIsBad) {
+    const fixed = fixBadTokens(text, fixEncoding);
+    if (fixed !== text) {
+      return {
+        text: fixed,
+        steps: [{ action: "apply", detail: "fix_bad_tokens" }],
       };
     }
   }
