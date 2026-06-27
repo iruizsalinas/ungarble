@@ -41,6 +41,18 @@ describe("regressions", () => {
       expect(ungarble(input)).toBe("[😀Rīga&©Âa! ");
       expect(ungarble(input, { maxDecodeLength: 1 })).toBe("[😀Rīga&©Âa! ");
     });
+
+    it("defers normalization until after chunk repair", () => {
+      expect(ungarble("caf&Atilde;&copy;", { maxDecodeLength: 8, normalization: "NFD" })).toBe("café");
+      expect(ungarble("Ã\x1b[31m©", { maxDecodeLength: 1, normalization: "NFD" })).toBe("é");
+    });
+
+    it("handles incomplete HTML entities with tiny chunks", () => {
+      expect(ungarble("&".repeat(1000), { html: true, encoding: false, escapes: false, maxDecodeLength: 1 }))
+        .toBe("&".repeat(1000));
+      expect(ungarble("&" + "a".repeat(999), { html: true, encoding: false, escapes: false, maxDecodeLength: 1 }))
+        .toBe("&" + "a".repeat(999));
+    });
   });
 
   describe("explain parity", () => {
@@ -102,6 +114,17 @@ describe("regressions", () => {
       expect(ungarble("\x1b[31m\x02red", { maxDecodeLength: 4, controls: false })).toBe("red");
       expect(ungarble("\x1b[31m\x02red", { controls: false })).toBe("red");
     });
+
+    it("handles repeated unterminated OSC starts with tiny chunks", () => {
+      const input = "\x1b]a".repeat(1000);
+      expect(ungarble(input, {
+        html: false,
+        encoding: false,
+        escapes: true,
+        controls: false,
+        maxDecodeLength: 1,
+      })).toBe(input);
+    });
   });
 
   describe("HTML entity aliases", () => {
@@ -109,6 +132,52 @@ describe("regressions", () => {
       expect(ungarble.html("&MICRO;")).toBe("µ");
       expect(ungarble.html("&SZLIG;")).toBe("ß");
       expect(ungarble.html("&SACUTE;")).toBe("Ś");
+    });
+  });
+
+  describe("do no harm", () => {
+    it("does not decode valid ligature and copyright text as MacRoman", () => {
+      expect(ungarble("ﬁ©a")).toBe("ﬁ©a");
+      expect(ungarble("ﬂ©a")).toBe("ﬂ©a");
+      expect(ungarble.detect("ﬁ©a")).toBe(false);
+    });
+
+    it("does not decode valid curly quote before accented text as MacRoman", () => {
+      expect(ungarble("l’été")).toBe("l’été");
+      expect(ungarble("d’été")).toBe("d’été");
+      expect(ungarble("’é")).toBe("’é");
+      expect(ungarble("â€™é")).toBe("’é");
+    });
+
+    it("does not decode isolated non-Latin byte-looking symbol pairs", () => {
+      expect(ungarble("×‘single’")).toBe("×‘single’");
+      expect(ungarble("×Łódź")).toBe("×Łódź");
+      expect(ungarble("“quote”£")).toBe("“quote”£");
+      expect(ungarble("voilà¥ voilà")).toBe("voilà¥ voilà");
+      expect(ungarble("world÷àZażółć")).toBe("world÷àZażółć");
+      expect(ungarble("café¥½…ação")).toBe("café¥½…ação");
+      expect(ungarble("÷©…àsplain")).toBe("÷©…àsplain");
+    });
+
+    it("repairs short standalone and mixed non-Latin mojibake", () => {
+      expect(ungarble("æ—¥")).toBe("日");
+      expect(ungarble("í•œ")).toBe("한");
+      expect(ungarble("Japanese: æ—¥.")).toBe("Japanese: 日.");
+      expect(ungarble("æ—¥í•œ")).toBe("日한");
+      expect(ungarble("æ—¥ðŸ˜€")).toBe("日😀");
+      expect(ungarble("Ù…Ø±Ø­Ø¨Ø§ æ—¥")).toBe("مرحبا 日");
+      expect(ungarble("à¤¹à¤¿æ—¥")).toBe("हि日");
+    });
+
+    it("keeps covered non-Latin and emoji mojibake repairs", () => {
+      expect(ungarble("×¢×‘×¨×™×ª")).toBe("עברית");
+      expect(ungarble("Ù…Ø±Ø­Ø¨Ø§")).toBe("مرحبا");
+      expect(ungarble("à¸ à¸²à¸©à¸²à¹„à¸—à¸¢")).toBe("ภาษาไทย");
+      expect(ungarble("à¤¹à¤¿à¤¨à¥à¤¦à¥€")).toBe("हिन्दी");
+      expect(ungarble("ç®ä½“ä¸­æ–‡")).toBe("简体中文");
+      expect(ungarble("æ—¥æœ¬èªž")).toBe("日本語");
+      expect(ungarble("í•œêµ­ì–´")).toBe("한국어");
+      expect(ungarble("ðŸ˜€")).toBe("😀");
     });
   });
 });

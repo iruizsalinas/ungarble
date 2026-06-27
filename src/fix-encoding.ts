@@ -6,6 +6,8 @@ import {
 } from "./codecs.js";
 import {
   restoreByteA0, replaceLossySequences, decodeInconsistentUtf8, fixBadTokens, fixC1Controls,
+  startsWithAmbiguousSingleNonLatinMojibake,
+  containsAmbiguousSingleNonLatinMojibakeReplacement, hasUnsupportedNonLatinMojibakeRepair,
 } from "./fixes.js";
 
 export interface ExplanationStep {
@@ -58,7 +60,12 @@ function fixEncodingOneStep(text: string): FixResult {
         ? decodeUtf8Variants(bytes)
         : decodeUtf8(bytes);
 
-      if (decoded !== null) {
+      if (
+        decoded !== null &&
+        !startsWithAmbiguousSingleNonLatinMojibake(text, decoded) &&
+        !containsAmbiguousSingleNonLatinMojibakeReplacement(text, decoded) &&
+        !hasUnsupportedNonLatinMojibakeRepair(text, decoded)
+      ) {
         const steps: ExplanationStep[] = [
           { action: "encode", detail: encoding },
           { action: "decode", detail: needVariants ? "utf-8-variants" : "utf-8" },

@@ -16,17 +16,38 @@ export function normalizedMaxDecodeLength(value: number, fallback: number): numb
   return Math.max(Math.floor(value), 1);
 }
 
+function lastIndexOfFrom(text: string, search: string, from: number, min: number): number {
+  for (let i = Math.min(from, text.length - 1); i >= min; i--) {
+    if (text[i] === search) return i;
+  }
+  return -1;
+}
+
 function readHtmlEntityEnd(text: string, start: number): number | null {
-  const semiIndex = text.indexOf(";", start);
-  if (semiIndex === -1 || semiIndex - start > 25) return null;
+  let semiIndex = -1;
+  const semiSearchEnd = Math.min(start + 25, text.length - 1);
+  for (let i = start; i <= semiSearchEnd; i++) {
+    if (text[i] === ";") {
+      semiIndex = i;
+      break;
+    }
+  }
+  if (semiIndex === -1) return null;
 
   const entity = text.slice(start, semiIndex + 1);
   if (!HTML_ENTITY_COMPLETE_RE.test(entity)) return null;
 
   let end = semiIndex + 1;
   if (entity.toLowerCase() === "&amp;" && text[end] === "#") {
-    const nestedSemi = text.indexOf(";", end);
-    if (nestedSemi !== -1 && nestedSemi - end <= 24) {
+    let nestedSemi = -1;
+    const nestedSearchEnd = Math.min(end + 24, text.length - 1);
+    for (let i = end; i <= nestedSearchEnd; i++) {
+      if (text[i] === ";") {
+        nestedSemi = i;
+        break;
+      }
+    }
+    if (nestedSemi !== -1) {
       const nested = text.slice(end, nestedSemi + 1);
       if (HTML_NUMERIC_TAIL_RE.test(nested)) {
         end = nestedSemi + 1;
@@ -39,7 +60,7 @@ function readHtmlEntityEnd(text: string, start: number): number | null {
 
 function extendHtmlEntityBoundary(text: string, pos: number, end: number): number {
   const entityAtStartEnd = readHtmlEntityEnd(text, pos);
-  const ampIndex = text.lastIndexOf("&", end - 1);
+  const ampIndex = lastIndexOfFrom(text, "&", end - 1, pos);
   let adjusted = end;
   let endsWithEntity = false;
 
@@ -49,7 +70,7 @@ function extendHtmlEntityBoundary(text: string, pos: number, end: number): numbe
       const entityEnd = readHtmlEntityEnd(text, ampIndex);
       if (entityEnd !== null) {
         const previousAmp = text[ampIndex - 1] === ";"
-          ? text.lastIndexOf("&", ampIndex - 2)
+          ? lastIndexOfFrom(text, "&", ampIndex - 2, pos + 1)
           : -1;
         if (
           previousAmp > pos &&
@@ -159,6 +180,7 @@ function readTerminalEscapeEnd(text: string, start: number): number | null {
         const end = i + 2;
         return text[end] === "\x02" ? end + 1 : end;
       }
+      if (text[i] === "\x1b") return null;
     }
   }
 
@@ -166,7 +188,7 @@ function readTerminalEscapeEnd(text: string, start: number): number | null {
 }
 
 function extendTerminalEscapeBoundary(text: string, pos: number, end: number): number {
-  let escIndex = text.lastIndexOf("\x1b", end - 1);
+  let escIndex = lastIndexOfFrom(text, "\x1b", end - 1, pos);
   if (escIndex < pos && text[end - 1] === "\x01" && text[end] === "\x1b") {
     escIndex = end;
   }

@@ -54,6 +54,9 @@ const endPunct =
   "\u203a" + // right single angle quote
   "\u2122";  // trademark
 
+const endPunctBeforeLower = endPunct.replace("\u201d", "").replace("\u2019", "");
+const endPunctBeforeCurrency = endPunct.replace("\u201d", "").replace("\u2019", "");
+
 // Numeric/math symbols
 const numeric =
   "\u00b2\u00b3\u00b9" + // superscripts 2, 3, 1
@@ -75,6 +78,8 @@ const numeric =
   "\u2265" +              // greater than or equal
   "\u2116" +              // numero sign
   "\u2310";               // reversed not
+
+const numericBeforeStartPunct = numeric.replace("\u00d7", "");
 
 // Kaomoji characters -- accented o's, u's, degree used in emoticons
 const kaomoji =
@@ -117,8 +122,7 @@ const lowerAccented =
   "\u015b\u015f\u0161\u0163\u0165" + // s-t
   "\u016b\u016f\u0171\u0173" + // u
   "\u017a\u017c\u017e" + // z
-  "\u0491" + // Cyrillic ghe with upturn
-  "\ufb01\ufb02"; // fi, fl ligatures
+  "\u0491";  // Cyrillic ghe with upturn
 
 // Uppercase Greek/Cyrillic
 const upperCommon =
@@ -167,10 +171,10 @@ const badnessPatterns: string[] = [
   `[${lowerAccented}${lowerCommon}${box}${endPunct}${currency}${numeric}][${upperAccented}]`,
 
   // Symbol then lowercase accented
-  `[${box}${endPunct}${currency}${numeric}][${lowerAccented}]`,
+  `[${box}${endPunctBeforeLower}${currency}${numeric}][${lowerAccented}]`,
 
   // Lowercase/symbol then currency
-  `[${lowerAccented}${box}${endPunct}][${currency}]`,
+  `[${lowerAccented}${box}${endPunctBeforeCurrency}][${currency}]`,
 
   // Uppercase accented + currency
   `[${upperAccented}][${currency}]`,
@@ -181,7 +185,7 @@ const badnessPatterns: string[] = [
   // Complex 3-char patterns
   `[${lowerAccented}${upperAccented}${box}${currency}${endPunct}][${startPunct}][${numeric}]`,
   `[${lowerAccented}${upperAccented}${currency}${numeric}${box}${law}][${endPunct}][${startPunct}]`,
-  `[${currency}${numeric}${box}][${startPunct}]`,
+  `[${currency}${numericBeforeStartPunct}${box}][${startPunct}]`,
   `[a-z][${upperAccented}][${startPunct}${currency}]`,
 
   // Box drawing mismatches
@@ -207,8 +211,15 @@ const badnessPatterns: string[] = [
   // Arabic mojibake (4-char pattern to avoid false positives)
   `[\u00d8\u00d9][${common}${currency}${bad}${numeric}${startPunct}\u00b0\u00b5][\u00d8\u00d9][${common}${currency}${bad}${numeric}${startPunct}\u00b0\u00b5]`,
 
+  // Hebrew mojibake: require at least two adjacent UTF-8 byte pairs.
+  `(?:\u00d7[\u0090-\u009f\u00a0-\u00aa\u02dc\u0153\u0161\u0178\u017e\u2013-\u2014\u2018-\u201d\u2022\u203a\u2122]){2,}`,
+
   // South Asian mojibake
   `\u00e0[\u00b2\u00b5\u00b9\u00bc\u00bd\u00be]`,
+
+  // Single 3-byte UTF-8 mojibake candidates, used for short CJK/Hangul/etc.
+  // Contextual guards prevent these from being decoded inside valid tokens.
+  `[\u00e0-\u00ef][${common}${currency}${bad}${numeric}${startPunct}${endPunct}\u0152\u0153][${common}${currency}${bad}${numeric}${startPunct}${endPunct}\u0152\u0153]`,
 
   // MacRoman mojibake
   `\u221a[\u00b1\u2202\u2020\u2260\u00ae\u2122\u00b4\u2264\u2265\u00a5\u00b5\u00f8]`,

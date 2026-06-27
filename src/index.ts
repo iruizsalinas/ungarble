@@ -217,13 +217,22 @@ function _ungarble(text: string, options?: UngarbleConfig, steps?: ExplanationSt
   }
 
   const lines = normalized.split("\n");
-  const segmentConfig = { ...config, lines: false, surrogates: false };
+  const segmentConfig = { ...config, lines: false, surrogates: false, normalization: false as const };
   let fixed = lines.map((line) => fixTextSegment(line, segmentConfig, steps)).join("\n");
 
   if (config.surrogates) {
     const before = fixed;
     fixed = fixSurrogates(fixed);
     recordApplyStep(steps, "surrogates", before, fixed);
+  }
+
+  if (config.normalization && typeof config.normalization === "string") {
+    const before = fixed;
+    try {
+      fixed = fixed.normalize(config.normalization);
+      recordApplyStep(steps, "normalization", before, fixed);
+    }
+    catch { /* invalid normalization form, skip */ }
   }
 
   return fixed;

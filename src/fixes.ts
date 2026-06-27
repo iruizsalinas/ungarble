@@ -282,6 +282,233 @@ function tokenAround(text: string, start: number, end: number): { start: number;
   return { start: tokenStart, end: tokenEnd, text: text.slice(tokenStart, tokenEnd) };
 }
 
+function isMojibakeMatchBoundary(text: string, index: number): boolean {
+  if (index < 0 || index >= text.length) return true;
+  return isTokenBoundary(text, index) || /[.,]/u.test(text[index]!);
+}
+
+function hasWordAfterAdjacentPunctuation(text: string, index: number): boolean {
+  let sawPunctuation = false;
+  for (let i = index; i < text.length; i++) {
+    const char = text[i]!;
+    if (/[\s"'`()[\]{}<>&|\\/:;!?]/u.test(char)) return false;
+    if (/[.,\u2026]/u.test(char)) {
+      sawPunctuation = true;
+      continue;
+    }
+    return sawPunctuation && /[\p{L}\p{N}]/u.test(char);
+  }
+  return false;
+}
+
+function hasC1ByteChar(text: string): boolean {
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    if (code >= 0x80 && code <= 0x9f) return true;
+  }
+  return false;
+}
+
+function isSingleAmbiguousScriptChar(text: string): boolean {
+  if ([...text].length !== 1) return false;
+  const cp = text.codePointAt(0);
+  return cp !== undefined &&
+    cp > 0x052f &&
+    !(cp >= 0x1e00 && cp <= 0x1eff) &&
+    !(cp >= 0x2000 && cp <= 0x27bf);
+}
+
+function highCodepointRepairGroup(cp: number): string | null {
+  if (cp <= 0x052f) return null;
+  if (cp >= 0x1e00 && cp <= 0x1eff) return null;
+  if (cp >= 0x2000 && cp <= 0x27bf) return null;
+  if (cp >= 0x0590 && cp <= 0x05ff) return "hebrew";
+  if (cp >= 0x0600 && cp <= 0x06ff) return "arabic";
+  if (cp >= 0x0900 && cp <= 0x097f) return "devanagari";
+  if (cp >= 0x0e00 && cp <= 0x0e7f) return "thai";
+  if (cp >= 0x3040 && cp <= 0x30ff) return "kana";
+  if (cp >= 0x4e00 && cp <= 0x9fff) return "cjk";
+  if (cp >= 0xac00 && cp <= 0xd7af) return "hangul";
+  if (cp >= 0x1f000 && cp <= 0x1faff) return "emoji";
+  return "other";
+}
+
+function hasUnsupportedHighCodepointRepair(text: string): boolean {
+  for (const char of text) {
+    const cp = char.codePointAt(0);
+    if (cp !== undefined && highCodepointRepairGroup(cp) === "other") {
+      return true;
+    }
+  }
+  return false;
+}
+
+function hasCyrillicText(text: string): boolean {
+  for (const char of text) {
+    const cp = char.codePointAt(0);
+    if (cp !== undefined && cp >= 0x0400 && cp <= 0x052f) return true;
+  }
+  return false;
+}
+
+function hasCyrillicMojibakeSourceSignal(text: string): boolean {
+  return /[\u00d0-\u00d3\u0412\u0413\u0420\u0421\u0432\u0402\u2568\u2564]/u.test(text);
+}
+
+function hasHebrewMixedWithOtherHighScript(text: string): boolean {
+  let hasHebrew = false;
+  let hasOther = false;
+
+  for (const char of text) {
+    const cp = char.codePointAt(0);
+    if (cp === undefined) continue;
+    const group = highCodepointRepairGroup(cp);
+    if (group === "hebrew") hasHebrew = true;
+    else if (group !== null && group !== "emoji") hasOther = true;
+  }
+
+  return hasHebrew && hasOther;
+}
+
+function hasLatinText(text: string): boolean {
+  for (const char of text) {
+    const cp = char.codePointAt(0);
+    if (cp === undefined) continue;
+    if (
+      (cp >= 0x41 && cp <= 0x5a) ||
+      (cp >= 0x61 && cp <= 0x7a) ||
+      (cp >= 0x00c0 && cp <= 0x024f) ||
+      (cp >= 0x1e00 && cp <= 0x1eff)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function hasMixedHighScriptWithLatinText(text: string): boolean {
+  const groups = new Set<string>();
+  for (const char of text) {
+    const cp = char.codePointAt(0);
+    if (cp === undefined) continue;
+    const group = highCodepointRepairGroup(cp);
+    if (group !== null && group !== "emoji") groups.add(group);
+  }
+  return groups.size > 1 && hasLatinText(text);
+}
+
+function hasDevanagariCjkRepairFromSeparatedSource(text: string, decoded: string): boolean {
+  let hasDevanagari = false;
+  let hasCjk = false;
+
+  for (const char of decoded) {
+    const cp = char.codePointAt(0);
+    if (cp === undefined) continue;
+    const group = highCodepointRepairGroup(cp);
+    if (group === "devanagari") hasDevanagari = true;
+    if (group === "cjk") hasCjk = true;
+  }
+
+  return hasDevanagari && hasCjk && /\s/u.test(text);
+}
+
+function hasSingleHighScriptCharWithWordText(text: string): boolean {
+  let highCount = 0;
+  let hasWordText = false;
+
+  for (const char of text) {
+    const cp = char.codePointAt(0);
+    if (cp === undefined) continue;
+
+    const group = highCodepointRepairGroup(cp);
+    if (group !== null && group !== "emoji") {
+      highCount++;
+    } else if (/[\p{L}\p{N}]/u.test(char)) {
+      hasWordText = true;
+    }
+  }
+
+  return highCount === 1 && hasWordText;
+}
+
+function isAmbiguousSingleNonLatinMojibakeSource(text: string): boolean {
+  if (text.length < 2 || text.length > 4 || hasC1ByteChar(text)) return false;
+  return (
+    text[0] === "\u00b5" ||
+    text[0] === "\u00d7" ||
+    text[0] === "\u00e0" ||
+    text[0] === "\u00f7" ||
+    text[0] === "\u2026" ||
+    text[0] === "\u20ac"
+  );
+}
+
+export function isAmbiguousSingleNonLatinMojibake(text: string, decoded: string): boolean {
+  if (text.length < 2 || text.length > 3 || hasC1ByteChar(text)) {
+    return false;
+  }
+
+  return isSingleAmbiguousScriptChar(decoded);
+}
+
+export function startsWithAmbiguousSingleNonLatinMojibake(text: string, decoded: string): boolean {
+  if (text.length <= 3) return false;
+
+  for (const sourceLength of [2, 3]) {
+    if (text.length < sourceLength || decoded.length < 1) continue;
+
+    const source = text.slice(0, sourceLength);
+    if (hasC1ByteChar(source)) continue;
+
+    const decodedFirst = [...decoded][0] ?? "";
+    if (
+      isSingleAmbiguousScriptChar(decodedFirst) &&
+      decoded.slice(decodedFirst.length) === text.slice(sourceLength)
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+export function hasUnsupportedNonLatinMojibakeRepair(text: string, decoded: string): boolean {
+  return !hasC1ByteChar(text) && (
+    hasUnsupportedHighCodepointRepair(decoded) ||
+    (hasCyrillicText(decoded) && !hasCyrillicMojibakeSourceSignal(text)) ||
+    hasHebrewMixedWithOtherHighScript(decoded) ||
+    hasMixedHighScriptWithLatinText(decoded) ||
+    hasDevanagariCjkRepairFromSeparatedSource(text, decoded) ||
+    hasSingleHighScriptCharWithWordText(decoded)
+  );
+}
+
+export function containsAmbiguousSingleNonLatinMojibakeReplacement(text: string, decoded: string): boolean {
+  if (text.length <= 3) return false;
+
+  let index = 0;
+  while (index < text.length && index < decoded.length && text[index] === decoded[index]) {
+    index++;
+  }
+
+  for (const sourceLength of [2, 3]) {
+    if (index + sourceLength > text.length || index >= decoded.length) continue;
+
+    const source = text.slice(index, index + sourceLength);
+    if (hasC1ByteChar(source)) continue;
+
+    const decodedFirst = [...decoded.slice(index)][0] ?? "";
+    if (
+      isSingleAmbiguousScriptChar(decodedFirst) &&
+      decoded.slice(index + decodedFirst.length) === text.slice(index + sourceLength)
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export function decodeInconsistentUtf8(text: string, fixEncodingFn: (t: string) => string): string {
   UTF8_DETECTOR_RE.lastIndex = 0;
   let result = "";
@@ -294,6 +521,7 @@ export function decodeInconsistentUtf8(text: string, fixEncodingFn: (t: string) 
 
     // guard: shorter than full text (prevents recursion) and actually bad
     if (matchStr.length >= text.length) continue;
+    if (isAmbiguousSingleNonLatinMojibakeSource(matchStr)) continue;
 
     let segmentStart = matchIndex;
     let segmentEnd = matchIndex + matchStr.length;
@@ -318,6 +546,29 @@ export function decodeInconsistentUtf8(text: string, fixEncodingFn: (t: string) 
     if (fixed === undefined) {
       fixed = fixEncodingFn(segmentStr);
       fixedSegments.set(segmentStr, fixed);
+    }
+    if (
+      segmentStr === matchStr &&
+      isAmbiguousSingleNonLatinMojibake(segmentStr, fixed)
+    ) {
+      const token = tokenAround(text, matchIndex, matchIndex + matchStr.length);
+      if (
+        token.text.length > matchStr.length &&
+        (
+          !isMojibakeMatchBoundary(text, matchIndex - 1) ||
+          !isMojibakeMatchBoundary(text, matchIndex + matchStr.length) ||
+          /[\p{L}\p{N}]/u.test(text.slice(matchIndex + matchStr.length, token.end))
+        )
+      ) {
+        continue;
+      }
+    }
+    if (
+      startsWithAmbiguousSingleNonLatinMojibake(segmentStr, fixed) ||
+      containsAmbiguousSingleNonLatinMojibakeReplacement(segmentStr, fixed) ||
+      hasUnsupportedNonLatinMojibakeRepair(segmentStr, fixed)
+    ) {
+      continue;
     }
     if (fixed !== segmentStr) {
       result += text.slice(lastIndex, segmentStart);
@@ -368,6 +619,22 @@ export function fixBadTokens(text: string, fixEncodingFn: (t: string) => string)
     if (fixed === undefined) {
       fixed = fixEncodingFn(token);
       fixedTokens.set(token, fixed);
+    }
+    if (isAmbiguousSingleNonLatinMojibakeSource(token)) {
+      continue;
+    }
+    if (
+      isAmbiguousSingleNonLatinMojibake(token, fixed) &&
+      hasWordAfterAdjacentPunctuation(text, i)
+    ) {
+      continue;
+    }
+    if (
+      startsWithAmbiguousSingleNonLatinMojibake(token, fixed) ||
+      containsAmbiguousSingleNonLatinMojibakeReplacement(token, fixed) ||
+      hasUnsupportedNonLatinMojibakeRepair(token, fixed)
+    ) {
+      continue;
     }
     if (fixed !== token) {
       result += text.slice(lastIndex, start) + fixed;
