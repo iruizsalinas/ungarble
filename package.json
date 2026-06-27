@@ -1,6 +1,6 @@
 {
   "name": "ungarble",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Fix garbled text from encoding errors",
   "type": "module",
   "main": "./dist/index.cjs",
