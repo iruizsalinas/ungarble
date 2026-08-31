@@ -7,9 +7,9 @@ Give `ungarble` a string. It detects likely encoding mistakes, repairs them, and
 ```ts
 import { ungarble } from "ungarble";
 
-ungarble("cafÃ©");                 // "café"
-ungarble("Itâ€™s 20â‚¬");            // "It’s 20€"
-ungarble("FranÃƒÂ§ais");            // "Français" (double encoding)
+ungarble("cafÃ©"); // "café"
+ungarble("Itâ€™s 20â‚¬"); // "It’s 20€"
+ungarble("FranÃƒÂ§ais"); // "Français" (double encoding)
 ungarble("Already valid: café ✓"); // unchanged
 ```
 
