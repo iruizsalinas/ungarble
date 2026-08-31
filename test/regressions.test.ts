@@ -2,6 +2,43 @@ import { describe, expect, it } from "vitest";
 import { ungarble } from "../src/index.js";
 
 describe("regressions", () => {
+  describe("input limit", () => {
+    it("is unlimited by default", () => {
+      const input = "a".repeat(1_000_001);
+      expect(ungarble(input)).toBe(input);
+    });
+
+    it("accepts input exactly at the configured limit", () => {
+      expect(ungarble("cafÃ©", { limit: 5 })).toBe("café");
+    });
+
+    it("throws before processing input over the configured limit", () => {
+      expect(() => ungarble("cafÃ©", { limit: 4 })).toThrow(
+        new RangeError("Input length 5 exceeds the configured limit of 4"),
+      );
+      expect(() => ungarble.explain("abcdef", { limit: 5 })).toThrow(RangeError);
+    });
+
+    it("measures UTF-16 code units", () => {
+      expect(() => ungarble("😀", { limit: 1 })).toThrow(RangeError);
+      expect(ungarble("😀", { limit: 2 })).toBe("😀");
+    });
+
+    it("rejects invalid limits", () => {
+      expect(() => ungarble("text", { limit: -1 })).toThrow(RangeError);
+      expect(() => ungarble("text", { limit: NaN })).toThrow(RangeError);
+    });
+
+    it("rejects limits with the wrong runtime type", () => {
+      expect(() => ungarble("text", { limit: "large" } as unknown as Parameters<typeof ungarble>[1]))
+        .toThrow(new TypeError("limit must be a number"));
+    });
+
+    it("treats an explicit undefined limit as omitted", () => {
+      expect(ungarble("text", { limit: undefined })).toBe("text");
+    });
+  });
+
   describe("chunk boundaries", () => {
     it("preserves surrogate pairs split at the default decode boundary", () => {
       const text = "a".repeat(999_999) + "😀";
@@ -10,47 +47,47 @@ describe("regressions", () => {
     });
 
     it("preserves surrogate pairs with small decode chunks", () => {
-      expect(ungarble("abc😀def", { maxDecodeLength: 4 })).toBe("abc😀def");
+      expect(ungarble("abc😀def", { chunk: 4 })).toBe("abc😀def");
     });
 
     it("does not split mojibake byte sequences across chunks", () => {
-      expect(ungarble("cafÃ©", { maxDecodeLength: 4 })).toBe("café");
-      expect(ungarble("Táº¡i", { maxDecodeLength: 2 })).toBe("Tại");
-      expect(ungarble("ÄŒeÅ¡tina", { maxDecodeLength: 1 })).toBe("Čeština");
-      expect(ungarble("ç®€ä½“ä¸­æ–‡", { maxDecodeLength: 2 })).toBe("简体中文");
-      expect(ungarble("×¢×‘×¨×™×ª", { maxDecodeLength: 2 })).toBe("עברית");
-      expect(ungarble("×¢×‘×¨×™×ª ×”×•×“×¢×”", { maxDecodeLength: 1 })).toBe("עברית הודעה");
-      expect(ungarble("Ð ÑƒÑÑÐºÐ¸Ð¹ Ñ‚ÐµÐºÑÑ‚", { maxDecodeLength: 1 })).toBe("Русский текст");
+      expect(ungarble("cafÃ©", { chunk: 4 })).toBe("café");
+      expect(ungarble("Táº¡i", { chunk: 2 })).toBe("Tại");
+      expect(ungarble("ÄŒeÅ¡tina", { chunk: 1 })).toBe("Čeština");
+      expect(ungarble("ç®€ä½“ä¸­æ–‡", { chunk: 2 })).toBe("简体中文");
+      expect(ungarble("×¢×‘×¨×™×ª", { chunk: 2 })).toBe("עברית");
+      expect(ungarble("×¢×‘×¨×™×ª ×”×•×“×¢×”", { chunk: 1 })).toBe("עברית הודעה");
+      expect(ungarble("Ð ÑƒÑÑÐºÐ¸Ð¹ Ñ‚ÐµÐºÑÑ‚", { chunk: 1 })).toBe("Русский текст");
     });
 
     it("does not split HTML entities needed by a later encoding fix", () => {
-      expect(ungarble("caf&Atilde;&copy;", { maxDecodeLength: 10 })).toBe("café");
-      expect(ungarble("&Atilde;&copy; ".repeat(4), { maxDecodeLength: 10 })).toBe("é ".repeat(4));
+      expect(ungarble("caf&Atilde;&copy;", { chunk: 10 })).toBe("café");
+      expect(ungarble("&Atilde;&copy; ".repeat(4), { chunk: 10 })).toBe("é ".repeat(4));
     });
 
     it("fixes mojibake made adjacent by chunked HTML or escape cleanup", () => {
       expect(ungarble("cafÃ&amp;copy;")).toBe("café");
-      expect(ungarble("cafÃ&amp;copy;", { maxDecodeLength: 1 })).toBe("café");
+      expect(ungarble("cafÃ&amp;copy;", { chunk: 1 })).toBe("café");
 
       expect(ungarble("Ã\x1b[31m©")).toBe("é");
-      expect(ungarble("Ã\x1b[31m©", { maxDecodeLength: 1 })).toBe("é");
+      expect(ungarble("Ã\x1b[31m©", { chunk: 1 })).toBe("é");
     });
 
     it("uses consistent token boundaries around decoded HTML separators", () => {
       const input = "[😀RÄ«ga&amp;&#169;Âa! ";
       expect(ungarble(input)).toBe("[😀Rīga&©Âa! ");
-      expect(ungarble(input, { maxDecodeLength: 1 })).toBe("[😀Rīga&©Âa! ");
+      expect(ungarble(input, { chunk: 1 })).toBe("[😀Rīga&©Âa! ");
     });
 
     it("defers normalization until after chunk repair", () => {
-      expect(ungarble("caf&Atilde;&copy;", { maxDecodeLength: 8, normalization: "NFD" })).toBe("café");
-      expect(ungarble("Ã\x1b[31m©", { maxDecodeLength: 1, normalization: "NFD" })).toBe("é");
+      expect(ungarble("caf&Atilde;&copy;", { chunk: 8, normalization: "NFD" })).toBe("café");
+      expect(ungarble("Ã\x1b[31m©", { chunk: 1, normalization: "NFD" })).toBe("é");
     });
 
     it("handles incomplete HTML entities with tiny chunks", () => {
-      expect(ungarble("&".repeat(1000), { html: true, encoding: false, escapes: false, maxDecodeLength: 1 }))
+      expect(ungarble("&".repeat(1000), { html: true, encoding: false, escapes: false, chunk: 1 }))
         .toBe("&".repeat(1000));
-      expect(ungarble("&" + "a".repeat(999), { html: true, encoding: false, escapes: false, maxDecodeLength: 1 }))
+      expect(ungarble("&" + "a".repeat(999), { html: true, encoding: false, escapes: false, chunk: 1 }))
         .toBe("&" + "a".repeat(999));
     });
   });
@@ -60,7 +97,7 @@ describe("regressions", () => {
       ["10Î&frac14;s", undefined],
       ["caf&Atilde;&copy;", undefined],
       ["Jos&amp;#195;&amp;#169;", undefined],
-      ["cafÃ©", { maxDecodeLength: 4 }],
+      ["cafÃ©", { chunk: 4 }],
     ];
 
     for (const [input, options] of cases) {
@@ -80,10 +117,10 @@ describe("regressions", () => {
 
     it("fully fixes entity-encoded mojibake with tiny chunks in one call", () => {
       const input = "&#xe6;&#x97;&#165;&#230;&#156;&#172;&#xe8;&#170;&#158;";
-      expect(ungarble(input, { maxDecodeLength: 1 })).toBe("日本語");
+      expect(ungarble(input, { chunk: 1 })).toBe("日本語");
 
       const cyrillic = "&#xd0;&#xa0;&#209;&#131;&#209;&#129;&#xd1;&#x81;&#208;&#xba;&#xd0;&#184;&#208;&#185;&#x20;&#xd1;&#x82;&#208;&#181;&#208;&#186;&#209;&#129;&#209;&#130;";
-      expect(ungarble(cyrillic, { maxDecodeLength: 8 })).toBe("Русский текст");
+      expect(ungarble(cyrillic, { chunk: 8 })).toBe("Русский текст");
     });
 
     it("does not reinterpret repeated repaired chunks as new mojibake", () => {
@@ -92,8 +129,8 @@ describe("regressions", () => {
       const expected = "éé“é”".repeat(4);
 
       expect(ungarble(input)).toBe(expected);
-      for (const maxDecodeLength of [1, 2, 3, 10]) {
-        expect(ungarble(input, { maxDecodeLength })).toBe(expected);
+      for (const chunk of [1, 2, 3, 10]) {
+        expect(ungarble(input, { chunk })).toBe(expected);
       }
     });
   });
@@ -101,17 +138,17 @@ describe("regressions", () => {
   describe("terminal escapes", () => {
     it("removes private CSI sequences", () => {
       expect(ungarble("\x1b[?25lhidden")).toBe("hidden");
-      expect(ungarble("\x1b[31mred", { maxDecodeLength: 1 })).toBe("red");
+      expect(ungarble("\x1b[31mred", { chunk: 1 })).toBe("red");
     });
 
     it("removes OSC sequences", () => {
       expect(ungarble("\x1b]0;title\x07x")).toBe("x");
-      expect(ungarble("\x1b]0;title\x07x", { maxDecodeLength: 2 })).toBe("x");
+      expect(ungarble("\x1b]0;title\x07x", { chunk: 2 })).toBe("x");
     });
 
     it("keeps terminal escape wrappers with the escape chunk", () => {
-      expect(ungarble("\x01\x1b[31mred", { maxDecodeLength: 1, controls: false })).toBe("red");
-      expect(ungarble("\x1b[31m\x02red", { maxDecodeLength: 4, controls: false })).toBe("red");
+      expect(ungarble("\x01\x1b[31mred", { chunk: 1, controls: false })).toBe("red");
+      expect(ungarble("\x1b[31m\x02red", { chunk: 4, controls: false })).toBe("red");
       expect(ungarble("\x1b[31m\x02red", { controls: false })).toBe("red");
     });
 
@@ -122,7 +159,7 @@ describe("regressions", () => {
         encoding: false,
         escapes: true,
         controls: false,
-        maxDecodeLength: 1,
+        chunk: 1,
       })).toBe(input);
     });
   });

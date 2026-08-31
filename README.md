@@ -1,14 +1,16 @@
 # ungarble
 
-Fix garbled text from encoding errors.
+Turn mojibake and other encoding damage back into readable text.
+
+Give `ungarble` a string. It detects likely encoding mistakes, repairs them, and leaves valid text alone:
 
 ```ts
-import { ungarble } from 'ungarble'
+import { ungarble } from "ungarble";
 
-ungarble("JosÃ©")        // -> "José"
-ungarble("Ã perturber")  // -> "à perturber"
-ungarble("Ä°stanbul")    // -> "İstanbul"
-ungarble("already fine")  // -> "already fine" (unchanged)
+ungarble("cafÃ©");                 // "café"
+ungarble("Itâ€™s 20â‚¬");            // "It’s 20€"
+ungarble("FranÃƒÂ§ais");            // "Français" (double encoding)
+ungarble("Already valid: café ✓"); // unchanged
 ```
 
 ## Installation
@@ -87,6 +89,7 @@ Toggle individual fixes when calling `ungarble()` or `ungarble.explain()`:
 ```ts
 ungarble(text, { encoding: false })  // skip encoding fix
 ungarble(text, { quotes: true })     // also uncurl quotes (off by default)
+ungarble(text, { limit: 10_000_000 }) // reject input over 10 million UTF-16 code units
 ```
 
 | Option | Type | Default | Description |
@@ -102,6 +105,12 @@ ungarble(text, { quotes: true })     // also uncurl quotes (off by default)
 | `ligatures` | `boolean` | `false` | Expand ligatures (ﬁ -> fi) |
 | `width` | `boolean` | `false` | Normalize fullwidth characters |
 | `normalization` | `"NFC" \| "NFD" \| "NFKC" \| "NFKD" \| false` | `"NFC"` | Unicode normalization form |
+| `chunk` | `number` | `1,000,000` | Maximum number of UTF-16 code units processed in one repair chunk |
+| `limit` | `number` | Unlimited | Maximum accepted input length in UTF-16 code units; throws `RangeError` when exceeded |
+
+`limit` is disabled by default, so `ungarble` accepts input of any length. Applications that process untrusted data should usually check its size before calling `ungarble` and set an appropriate limit for their environment.
+
+Both `limit` and `chunk` measure JavaScript UTF-16 code units, not bytes. For HTTP requests, file uploads, and similar inputs, enforce a byte-size limit at the input boundary before converting the data to a string.
 
 ## Supported encodings
 

@@ -20,7 +20,8 @@ export interface UngarbleConfig {
   escapes?: boolean;
   controls?: boolean;
   c1?: boolean;
-  maxDecodeLength?: number;
+  chunk?: number;
+  limit?: number;
 }
 
 const DEFAULT_CONFIG: Required<UngarbleConfig> = {
@@ -35,8 +36,27 @@ const DEFAULT_CONFIG: Required<UngarbleConfig> = {
   escapes: true,
   controls: true,
   c1: true,
-  maxDecodeLength: 1_000_000,
+  chunk: 1_000_000,
+  limit: Infinity,
 };
+
+function enforceInputLimit(text: string, limit: unknown): void {
+  if (limit === undefined) return;
+  if (typeof limit !== "number") {
+    throw new TypeError("limit must be a number");
+  }
+  if (limit === Infinity) return;
+  if (!Number.isFinite(limit) || limit < 0) {
+    throw new RangeError("limit must be a non-negative finite number or Infinity");
+  }
+
+  const normalizedLimit = Math.floor(limit);
+  if (text.length > normalizedLimit) {
+    throw new RangeError(
+      `Input length ${text.length} exceeds the configured limit of ${normalizedLimit}`,
+    );
+  }
+}
 
 function recordApplyStep(
   steps: ExplanationStep[] | undefined,
@@ -174,7 +194,7 @@ function fixTextSegment(
   config: Required<UngarbleConfig>,
   steps?: ExplanationStep[],
 ): string {
-  const maxLen = normalizedMaxDecodeLength(config.maxDecodeLength, DEFAULT_CONFIG.maxDecodeLength);
+  const maxLen = normalizedMaxDecodeLength(config.chunk, DEFAULT_CONFIG.chunk);
   if (text.length <= maxLen) {
     return applyFixPipeline(text, config, steps);
   }
@@ -205,6 +225,7 @@ function fixTextSegment(
 
 function _ungarble(text: string, options?: UngarbleConfig, steps?: ExplanationStep[]): string {
   const config = { ...DEFAULT_CONFIG, ...options };
+  enforceInputLimit(text, config.limit);
 
   if (config.html === "auto") {
     config.html = !text.includes("<");
