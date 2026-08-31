@@ -11,5 +11,5 @@ export default defineConfig({
       ? { js: ".js", dts: ".d.ts" }
       : { js: ".cjs", dts: ".d.cts" };
   },
-  target: "node18",
+  target: "es2022",
 });

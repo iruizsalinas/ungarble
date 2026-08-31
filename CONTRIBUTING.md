@@ -27,6 +27,7 @@ For code changes:
 
 ```sh
 npm install
+npx playwright install chromium
 npm test
 npm run build
 ```

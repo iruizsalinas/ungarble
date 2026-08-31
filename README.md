@@ -4,6 +4,8 @@ Turn mojibake and other encoding damage back into readable text.
 
 Give `ungarble` a string. It detects likely encoding mistakes, repairs them, and leaves valid text alone:
 
+Works in Node.js 18+ and browsers.
+
 ```ts
 import { ungarble } from "ungarble";
 
