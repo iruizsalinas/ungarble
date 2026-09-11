@@ -98,6 +98,10 @@ describe("regressions", () => {
       ["caf&Atilde;&copy;", undefined],
       ["Jos&amp;#195;&amp;#169;", undefined],
       ["cafÃ©", { chunk: 4 }],
+      ["ï»¿", undefined],
+      ["10ÃŽ&frac14;s", undefined],
+      ["Ã¢â€�â€™(Ã¢Å’Â£Ã‹â€ºÃ¢Å’Â£)Ã¢â€�Å½", undefined],
+      ["There are a lot of Ã’s in mojibake text", undefined],
     ];
 
     for (const [input, options] of cases) {

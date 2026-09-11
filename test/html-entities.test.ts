@@ -55,6 +55,10 @@ describe("HTML entity handling", () => {
     expect(ungarble.html("EURO &EURO;")).toBe("EURO €");
   });
 
+  it("unescapes HTML5 checkmark aliases", () => {
+    expect(ungarble.html("&check; &checkmark;")).toBe("✓ ✓");
+  });
+
   it("handles Czech VŠICHNI", () => {
     expect(ungarble.html("V&SCARON;ICHNI")).toBe("VŠICHNI");
   });

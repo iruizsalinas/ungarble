@@ -20,7 +20,7 @@ describe("in-the-wild", () => {
   const cases = [
     {
       label: "Low-codepoint emoji",
-      original: "He's Justin\u2764",
+      original: "He's Justinâ\u009d¤",
       fixed: "He's Justin\u2764",
       expect: "pass",
     },
@@ -34,7 +34,7 @@ describe("in-the-wild", () => {
     },
     {
       label: "Checkmark that almost looks okay as mojibake",
-      original: "\u2714 No problems",
+      original: "âœ” No problems",
       fixed: "\u2714 No problems",
       expect: "pass",
     },

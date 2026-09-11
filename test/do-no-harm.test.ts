@@ -135,6 +135,21 @@ describe("do no harm - valid text must pass through unchanged", () => {
       expect(ungarble.encoding(text)).toBe(text);
     });
 
+    it("preserves Ã followed by a curly possessive apostrophe", () => {
+      const text = "There are a lot of Ã’s in mojibake text";
+      expect(ungarble.encoding(text)).toBe(text);
+    });
+
+    it("preserves accented names followed by a curly possessive apostrophe", () => {
+      const text = "Join ZZAJÉ’s Official Fan List and receive news, events, and more!";
+      expect(ungarble.encoding(text)).toBe(text);
+    });
+
+    it("preserves non-ASCII Indonesian leetspeak", () => {
+      const text = "MÄ£ÄM ÌÑÌ Q £ÄGÌ GÄLÄW ÑÍCH SÖÄ£ ÑÝÄ $ÚÄMÌ Q £ÄGÌ GÄK ÉÑÄK BÄDÄÑ";
+      expect(ungarble.encoding(text)).toBe(text);
+    });
+
     it("preserves NICIODATĂ™", () => {
       const text = "NICIODATĂ™";
       expect(ungarble.encoding(text)).toBe(text);

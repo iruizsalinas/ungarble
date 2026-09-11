@@ -211,7 +211,9 @@ const utf8Encoder = new TextEncoder();
 
 export function decodeUtf8(bytes: Uint8Array): string | null {
   try {
-    const decoder = new TextDecoder("utf-8", { fatal: true });
+    // `ignoreBOM: true` means "do not use a BOM as a decoding signature" and
+    // therefore preserves U+FEFF for the caller to handle explicitly.
+    const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
     return decoder.decode(bytes);
   } catch {
     return null;

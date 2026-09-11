@@ -31,6 +31,43 @@ function isSloppy(encoding: EncodingName): boolean {
   return encoding.startsWith("sloppy-");
 }
 
+function hasCurlyPossessive(text: string): boolean {
+  return /\p{L}\u2019[A-Za-z]/u.test(text);
+}
+
+function decodeCandidate(text: string, encoding: EncodingName): { text: string; variants: boolean } | null {
+  const encoded = encodeSingleByte(text, encoding);
+  if (!encoded) return null;
+
+  let bytes = restoreByteA0(encoded);
+  if (isSloppy(encoding)) {
+    bytes = replaceLossySequences(bytes);
+  }
+
+  const variants = bytesContain(bytes, 0xed) || bytesContain(bytes, 0xc0);
+  const decoded = variants ? decodeUtf8Variants(bytes) : decodeUtf8(bytes);
+  if (decoded === null) return null;
+
+  return { text: decoded, variants };
+}
+
+function decodeDetectorMatch(text: string): string {
+  for (const encoding of CHARMAP_ENCODINGS) {
+    if (!possibleEncoding(text, encoding)) continue;
+    const candidate = decodeCandidate(text, encoding);
+    if (!candidate) continue;
+    if (
+      startsWithAmbiguousSingleNonLatinMojibake(text, candidate.text) ||
+      containsAmbiguousSingleNonLatinMojibakeReplacement(text, candidate.text) ||
+      hasUnsupportedNonLatinMojibakeRepair(text, candidate.text)
+    ) {
+      continue;
+    }
+    return candidate.text;
+  }
+  return text;
+}
+
 function fixEncodingOneStep(text: string): FixResult {
   if (isAscii(text)) {
     return { text, steps: [] };
@@ -44,31 +81,19 @@ function fixEncodingOneStep(text: string): FixResult {
     for (const encoding of CHARMAP_ENCODINGS) {
       if (!possibleEncoding(text, encoding)) continue;
 
-      const encoded = encodeSingleByte(text, encoding);
-      if (!encoded) continue;
-
-      let bytes = encoded;
-      const restored = restoreByteA0(bytes);
-      bytes = restored;
-
-      if (isSloppy(encoding)) {
-        bytes = replaceLossySequences(bytes);
-      }
-
-      const needVariants = bytesContain(bytes, 0xed) || bytesContain(bytes, 0xc0);
-      const decoded = needVariants
-        ? decodeUtf8Variants(bytes)
-        : decodeUtf8(bytes);
+      const candidate = decodeCandidate(text, encoding);
+      const decoded = candidate?.text ?? null;
 
       if (
         decoded !== null &&
+        !hasCurlyPossessive(text) &&
         !startsWithAmbiguousSingleNonLatinMojibake(text, decoded) &&
         !containsAmbiguousSingleNonLatinMojibakeReplacement(text, decoded) &&
         !hasUnsupportedNonLatinMojibakeRepair(text, decoded)
       ) {
         const steps: ExplanationStep[] = [
           { action: "encode", detail: encoding },
-          { action: "decode", detail: needVariants ? "utf-8-variants" : "utf-8" },
+          { action: "decode", detail: candidate!.variants ? "utf-8-variants" : "utf-8" },
         ];
         return { text: decoded, steps };
       }
@@ -112,7 +137,7 @@ function fixEncodingOneStep(text: string): FixResult {
   // inconsistent UTF-8: runs even when full text isn't "bad"
   UTF8_DETECTOR_RE.lastIndex = 0;
   if (UTF8_DETECTOR_RE.test(text)) {
-    const fixed = decodeInconsistentUtf8(text, fixEncoding);
+    const fixed = decodeInconsistentUtf8(text, fixEncoding, decodeDetectorMatch);
     if (fixed !== text) {
       return {
         text: fixed,

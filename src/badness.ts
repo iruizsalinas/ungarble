@@ -160,6 +160,14 @@ const badnessPatterns: string[] = [
   // Any C1 control character is bad
   `[${c1}]`,
 
+  // Canonical UTF-8 mojibake that can otherwise look like standalone punctuation.
+  `\u00ef\u00bb\u00bf`, // UTF-8 BOM read as Windows-1252
+  `\u00e2\u201a\u00ac`, // euro sign read as Windows-1252
+  `\u00ef\u00bf\u00bd`, // replacement character read as Windows-1252
+  `\u00c2\u00bf`, // inverted question mark read as Windows-1252
+  `\u043f\u00ac\u0403`, // UTF-8 fi ligature read as Windows-1251
+  `\u201a\u00e0\u00f6\u00ac\u00a9`, // second layer of UTF-8 / MacRoman mojibake
+
   // "Bad" char adjacent to other suspicious chars
   `[${bad}${lowerAccented}${upperAccented}${box}${startPunct}${endPunct}${currency}${numeric}${law}][${bad}]`,
   `[${bad}][${lowerAccented}${upperAccented}${box}${startPunct}${endPunct}${currency}${numeric}${law}]`,

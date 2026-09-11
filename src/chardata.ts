@@ -20,6 +20,9 @@ function buildEncodingCharSet(encoding: EncodingName): Set<number> {
   if (table) {
     for (const cp of table.decode) set.add(cp);
   }
+  // Sloppy codecs deliberately encode U+FFFD as byte 0x1A so a damaged UTF-8
+  // sequence can be reconstructed as a replacement character.
+  if (encoding.startsWith("sloppy-")) set.add(0xfffd);
   return set;
 }
 
@@ -156,6 +159,16 @@ export function isUtf8MojibakeByteChar(char: string | undefined): boolean {
   return utf8ContChars.has(cp) || utf8First2Chars.has(cp) || utf8First3Chars.has(cp) || utf8First4Chars.has(cp);
 }
 
+export function isUtf8MojibakeLeadChar(char: string | undefined): boolean {
+  if (char === undefined) return false;
+  const cp = char.codePointAt(0);
+  return cp !== undefined && (
+    utf8First2Chars.has(cp) ||
+    utf8First3Chars.has(cp) ||
+    utf8First4Chars.has(cp)
+  );
+}
+
 // Matches sequences that look like UTF-8 bytes decoded as a single-byte encoding
 export const UTF8_DETECTOR_RE = new RegExp(
   `(?<!${contStrictClass})` +
@@ -174,7 +187,10 @@ export const ALTERED_UTF8_RE = /[\xc2\xc3\xc5\xce\xd0\xd9] /g;
 // A-grave word pattern: C3 + space at word boundary, used for French/Portuguese.
 export const A_GRAVE_WORD_RE = /\xc3 (?=(?:la |les |s'|qu|l'|d'|une? |cette |celui |celle |n'|qu'|jusqu'|lorsqu'|puisqu'|quoiqu'|quelqu'|aujourd'|entr'|presqu'|àquele|àquela|àquilo|às )|\S)/gi;
 
-export const LOSSY_UTF8_RE = /[\xc2-\xdf][\x1a?]|[\xe0-\xef][\x1a?\x80-\xbf][\x1a?]|[\xf0-\xf4][\x1a?\x80-\xbf][\x1a?\x80-\xbf][\x1a?]/g;
+// UTF-8 sequences where at least one continuation byte was replaced by SUB
+// (0x1A) or "?". Preserve the sequence width so a missing middle byte followed
+// by valid continuation bytes is recognized as well.
+export const LOSSY_UTF8_RE = /[\xc2-\xdf][\x1a?]|[\xe0-\xef](?:[\x1a?][\x1a?\x80-\xbf]|[\x80-\xbf][\x1a?])|[\xf0-\xf4](?:[\x1a?][\x1a?\x80-\xbf][\x1a?\x80-\xbf]|[\x80-\xbf][\x1a?][\x1a?\x80-\xbf]|[\x80-\xbf]{2}[\x1a?])/g;
 
 export const LIGATURES = new Map<number, string>([
   [0xfb00, "ff"],
@@ -299,6 +315,7 @@ const HTML_ENTITY_ENTRIES: Array<[string, string]> = [
   ["loz", "\u25ca"],
   ["spades", "\u2660"], ["clubs", "\u2663"],
   ["hearts", "\u2665"], ["diams", "\u2666"],
+  ["check", "\u2713"], ["checkmark", "\u2713"],
   ["Sacute", "\u015a"], ["sacute", "\u015b"],
   ["Scedil", "\u015e"], ["scedil", "\u015f"],
   ["Tcedil", "\u0162"], ["tcedil", "\u0163"],

@@ -2,8 +2,8 @@ import {
   LOSSY_UTF8_RE,
   LIGATURES, CONTROL_CHAR_RE, WIDTH_MAP,
   HTML_ENTITIES, HTML_ENTITY_RE,
-  UTF8_DETECTOR_RE,
-  isUtf8MojibakeByteChar,
+  UTF8_DETECTOR_RE, utf8MojibakeSequenceLengthAt,
+  isUtf8MojibakeByteChar, isUtf8MojibakeLeadChar,
 } from "./chardata.js";
 import { decodeSingleByte } from "./codecs.js";
 import { isBad } from "./badness.js";
@@ -56,6 +56,9 @@ export function removeTerminalEscapes(text: string): string {
 const SINGLE_QUOTE_RE = /[\u2018\u2019\u201a\u201b]/g;
 const DOUBLE_QUOTE_RE = /[\u201c\u201d\u201e\u201f]/g;
 const TOKEN_BOUNDARY_RE = /[\s"'`()[\]{}<>&|\\/:;!?]/u;
+const COMMON_MOJIBAKE_LEADS_BEFORE_QUOTES = new Set([
+  0x00c2, 0x00c3, 0x00c5, 0x00cb, 0x00ce, 0x00d0, 0x00d8, 0x00d9, 0x00e2,
+]);
 
 export function uncurlQuotes(text: string): string {
   return text
@@ -177,10 +180,11 @@ export function restoreByteA0(bytes: Uint8Array): Uint8Array {
       continue;
     }
 
-    // 3-byte: E0 + continuation + space -> E0 + continuation + A0
-    // restricted to E0 (Thai/Devanagari); E1-EF would produce CJK false positives
+    // 3-byte: E0 + continuation + space -> E0 + continuation + A0.
+    // Also accept E2 9A for the common damaged warning-sign sequence. Other
+    // E1-EF prefixes would produce too many CJK false positives.
     if (
-      b === 0xe0 &&
+      (b === 0xe0 || (b === 0xe2 && bytes[i + 1] === 0x9a)) &&
       i + 2 < bytes.length &&
       (bytes[i + 1]! & 0xc0) === 0x80 &&
       bytes[i + 2] === 0x20
@@ -254,15 +258,30 @@ export function replaceLossySequences(bytes: Uint8Array): Uint8Array {
 function isTokenBoundary(text: string, index: number): boolean {
   if (index < 0 || index >= text.length) return true;
   const code = text.charCodeAt(index);
+  const adjacentReplacement = [text[index - 1], text[index + 1]]
+    .some((char) => char?.codePointAt(0) === 0xfffd);
+  const quoteLike = (code >= 0x2018 && code <= 0x201f) || code === 0x2039 || code === 0x203a;
+  let quoteCompletesMojibake = false;
+  if (quoteLike) {
+    for (let start = Math.max(0, index - 3); start <= index; start++) {
+      const length = utf8MojibakeSequenceLengthAt(text, start);
+      if (
+        COMMON_MOJIBAKE_LEADS_BEFORE_QUOTES.has(text.charCodeAt(start)) &&
+        length > 0 &&
+        start + length === index + 1
+      ) {
+        quoteCompletesMojibake = true;
+        break;
+      }
+    }
+  }
   return (
     code <= 0x20 ||
     code === 0x7f ||
     code === 0x2026 ||
-    (code >= 0x2018 && code <= 0x201f) ||
-    code === 0x2039 ||
-    code === 0x203a ||
+    (quoteLike && !adjacentReplacement && !quoteCompletesMojibake) ||
     (code >= 0x80 && code <= 0x9f) ||
-    (code > 0x052f && !isUtf8MojibakeByteChar(text[index])) ||
+    (code > 0x052f && code !== 0xfffd && !isUtf8MojibakeByteChar(text[index])) ||
     TOKEN_BOUNDARY_RE.test(text[index]!)
   );
 }
@@ -314,17 +333,107 @@ function isSingleAmbiguousScriptChar(text: string): boolean {
   const cp = text.codePointAt(0);
   return cp !== undefined &&
     cp > 0x052f &&
+    cp !== 0xfeff &&
+    cp !== 0xfffd &&
+    !(cp >= 0xff00 && cp <= 0xffef) &&
+    !(cp >= 0xfb00 && cp <= 0xfb06) &&
     !(cp >= 0x1e00 && cp <= 0x1eff) &&
-    !(cp >= 0x2000 && cp <= 0x27bf);
+    !(cp >= 0x2000 && cp <= 0x28ff);
+}
+
+function isSingleAmbiguousLatinChar(text: string): boolean {
+  if ([...text].length !== 1) return false;
+  const cp = text.codePointAt(0);
+  return cp !== undefined && (
+    (cp >= 0x00c0 && cp <= 0x024f) ||
+    (cp >= 0x1e00 && cp <= 0x1eff)
+  );
+}
+
+function isNonAsciiMojibakeByteChar(char: string | undefined): boolean {
+  const cp = char?.codePointAt(0);
+  return cp === 0xfffd || (cp !== undefined && cp > 0x7f && isUtf8MojibakeLeadChar(char));
+}
+
+function isAmbiguousPartialLatinRepair(
+  text: string,
+  matchIndex: number,
+  matchText: string,
+  decoded: string,
+): boolean {
+  if (matchText.length < 2 || matchText.length > 3 || hasC1ByteChar(matchText)) return false;
+  if (!isSingleAmbiguousLatinChar(decoded)) return false;
+
+  const next = text[matchIndex + matchText.length];
+  if (next !== undefined && utf8MojibakeSequenceLengthAt(decoded + next, 0) > 0) {
+    return false;
+  }
+
+  return (
+    isNonAsciiMojibakeByteChar(text[matchIndex - 1]) ||
+    isNonAsciiMojibakeByteChar(text[matchIndex + matchText.length])
+  );
+}
+
+function isCurlyPossessiveMatch(text: string, matchIndex: number, matchText: string): boolean {
+  if (!matchText.endsWith("\u2019")) return false;
+  const before = matchText.slice(0, -1);
+  const after = text[matchIndex + matchText.length];
+  return /\p{L}$/u.test(before) && after !== undefined && /[A-Za-z]/u.test(after);
+}
+
+function countUtf8MojibakeSequences(text: string): number {
+  let count = 0;
+  for (let index = 0; index < text.length;) {
+    const length = utf8MojibakeSequenceLengthAt(text, index);
+    if (length > 0) {
+      count++;
+      index += length;
+    } else {
+      index++;
+    }
+  }
+  return count;
+}
+
+function hasConfidentDecodedScript(text: string): boolean {
+  for (const char of text) {
+    const cp = char.codePointAt(0);
+    if (cp === undefined) continue;
+    const group = highCodepointRepairGroup(cp);
+    if (
+      group === "hebrew" ||
+      group === "arabic" ||
+      group === "devanagari" ||
+      group === "tamil" ||
+      group === "thai" ||
+      group === "kana" ||
+      group === "cjk" ||
+      group === "hangul" ||
+      group === "emoji"
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function highCodepointRepairGroup(cp: number): string | null {
   if (cp <= 0x052f) return null;
   if (cp >= 0x1e00 && cp <= 0x1eff) return null;
-  if (cp >= 0x2000 && cp <= 0x27bf) return null;
+  if (cp >= 0x2000 && cp <= 0x28ff) return null;
+  // These are valid repair targets handled by later pipeline stages or preserved
+  // as explicit evidence of lossy decoding.
+  if (
+    cp === 0xfeff ||
+    cp === 0xfffd ||
+    (cp >= 0xfb00 && cp <= 0xfb06) ||
+    (cp >= 0xff00 && cp <= 0xffef)
+  ) return null;
   if (cp >= 0x0590 && cp <= 0x05ff) return "hebrew";
   if (cp >= 0x0600 && cp <= 0x06ff) return "arabic";
   if (cp >= 0x0900 && cp <= 0x097f) return "devanagari";
+  if (cp >= 0x0b80 && cp <= 0x0bff) return "tamil";
   if (cp >= 0x0e00 && cp <= 0x0e7f) return "thai";
   if (cp >= 0x3040 && cp <= 0x30ff) return "kana";
   if (cp >= 0x4e00 && cp <= 0x9fff) return "cjk";
@@ -509,7 +618,11 @@ export function containsAmbiguousSingleNonLatinMojibakeReplacement(text: string,
   return false;
 }
 
-export function decodeInconsistentUtf8(text: string, fixEncodingFn: (t: string) => string): string {
+export function decodeInconsistentUtf8(
+  text: string,
+  fixEncodingFn: (t: string) => string,
+  decodeMatchFn: (t: string) => string = fixEncodingFn,
+): string {
   UTF8_DETECTOR_RE.lastIndex = 0;
   let result = "";
   let lastIndex = 0;
@@ -518,34 +631,113 @@ export function decodeInconsistentUtf8(text: string, fixEncodingFn: (t: string) 
   for (const match of text.matchAll(UTF8_DETECTOR_RE)) {
     const matchStr = match[0];
     const matchIndex = match.index;
+    if (matchIndex < lastIndex) continue;
 
-    // guard: shorter than full text (prevents recursion) and actually bad
-    if (matchStr.length >= text.length) continue;
+    // A complete detector match containing multiple UTF-8 sequences is strong
+    // evidence even when the badness table does not cover the target script.
+    // Decode it directly instead of recursively calling fixEncoding unchanged.
+    if (matchStr.length >= text.length) {
+      const lossySignal = matchStr.length >= 3 && /[ \ufffd]/u.test(matchStr);
+      if (
+        !/^[\p{Script=Cyrillic}]+$/u.test(matchStr) &&
+        (
+          countUtf8MojibakeSequences(matchStr) >= 2 ||
+          lossySignal
+        )
+      ) {
+        const fixed = decodeMatchFn(matchStr);
+        if (fixed !== matchStr && (lossySignal || hasConfidentDecodedScript(fixed))) return fixed;
+      }
+      continue;
+    }
     if (isAmbiguousSingleNonLatinMojibakeSource(matchStr)) continue;
+    if (isCurlyPossessiveMatch(text, matchIndex, matchStr)) continue;
+
+    const matchIsBad = isBad(matchStr);
+    const lossySignal = matchStr.length >= 3 && /[ \ufffd]/u.test(matchStr);
+    const embeddedInAsciiWord =
+      matchStr[0] === "\u00c3" &&
+      /[A-Za-z]/u.test(text[matchIndex - 1] ?? "") &&
+      /[A-Za-z]/u.test(text[matchIndex + matchStr.length] ?? "");
+    if (!matchIsBad && embeddedInAsciiWord) {
+      const directlyFixed = decodeMatchFn(matchStr);
+      if (isSingleAmbiguousLatinChar(directlyFixed)) {
+        result += text.slice(lastIndex, matchIndex) + directlyFixed;
+        lastIndex = matchIndex + matchStr.length;
+        continue;
+      }
+    }
+    if (
+      !matchIsBad &&
+      !/^[\p{Script=Cyrillic}]+$/u.test(matchStr) &&
+      (
+        countUtf8MojibakeSequences(matchStr) >= 2 ||
+        lossySignal
+      )
+    ) {
+      const directlyFixed = decodeMatchFn(matchStr);
+      if (
+        directlyFixed !== matchStr &&
+        (lossySignal || hasConfidentDecodedScript(directlyFixed))
+      ) {
+        result += text.slice(lastIndex, matchIndex) + directlyFixed;
+        lastIndex = matchIndex + matchStr.length;
+        continue;
+      }
+    }
 
     let segmentStart = matchIndex;
     let segmentEnd = matchIndex + matchStr.length;
     let segmentStr = matchStr;
-    if (!isBad(matchStr)) {
+    let decodeMatchOnly = false;
+    if (matchIsBad) {
+      const token = tokenAround(text, matchIndex, segmentEnd);
+      const tokenFirst = token.text[0];
+      const tokenLast = token.text[token.text.length - 1];
+      const tokenHasDamageEdges = [tokenFirst, tokenLast].every((char) =>
+        char?.codePointAt(0) === 0xfffd || isUtf8MojibakeByteChar(char)
+      );
+      if (
+        !matchStr.endsWith(" ") &&
+        tokenHasDamageEdges &&
+        (token.text.includes("\ufffd") || !/[A-Za-z0-9]/u.test(token.text)) &&
+        token.text.length > matchStr.length &&
+        token.text.length < text.length &&
+        isBad(token.text)
+      ) {
+        segmentStart = token.start;
+        segmentEnd = token.end;
+        segmentStr = token.text;
+      }
+    } else {
       const token = tokenAround(text, matchIndex, segmentEnd);
       if (token.text.length <= matchStr.length || !isBad(token.text)) continue;
-      segmentStart = token.start;
-      segmentEnd = token.end;
-      segmentStr = token.text;
+      if (token.text.length >= text.length) {
+        // Recursing on the complete input would call this function with the
+        // same arguments. Decode only the detector match, using the bad token
+        // as the confidence signal.
+        decodeMatchOnly = true;
+      } else {
+        segmentStart = token.start;
+        segmentEnd = token.end;
+        segmentStr = token.text;
+      }
     }
     if (segmentStr.length >= text.length) continue;
     if (segmentStart < lastIndex) continue;
 
-    // skip spaced-out text like "C O N C L U S [C3] O"
+    // Skip spaced-out initials such as "C O N C L U S [C3] O" without
+    // suppressing ordinary prose that happens to precede an altered NBSP.
     if (segmentStr.endsWith(" ") && segmentStart >= 2) {
-      const prevTwo = text.slice(segmentStart - 2, segmentStart);
-      if (/^\S $/u.test(prevTwo)) continue;
+      const prefix = text.slice(0, segmentStart);
+      if (/(?:^|\s)(?:[A-Z] ){2,}$/u.test(prefix)) continue;
     }
 
-    let fixed = fixedSegments.get(segmentStr);
+    const cacheKey = `${decodeMatchOnly ? "match" : "segment"}:${segmentStr}`;
+    let fixed = fixedSegments.get(cacheKey);
     if (fixed === undefined) {
-      fixed = fixEncodingFn(segmentStr);
-      fixedSegments.set(segmentStr, fixed);
+      fixed = decodeMatchOnly ? decodeMatchFn(segmentStr) : fixEncodingFn(segmentStr);
+      fixedSegments.set(cacheKey, fixed);
     }
     if (
       segmentStr === matchStr &&
@@ -562,6 +754,12 @@ export function decodeInconsistentUtf8(text: string, fixEncodingFn: (t: string) 
       ) {
         continue;
       }
+    }
+    if (
+      segmentStr === matchStr &&
+      isAmbiguousPartialLatinRepair(text, matchIndex, matchStr, fixed)
+    ) {
+      continue;
     }
     if (
       startsWithAmbiguousSingleNonLatinMojibake(segmentStr, fixed) ||
