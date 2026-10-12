@@ -4,7 +4,7 @@ Turn mojibake and other encoding damage back into readable text.
 
 Give `ungarble` a string. It detects likely encoding mistakes, repairs them, and leaves valid text alone:
 
-Works in Node.js 18+ and browsers.
+Works across modern JavaScript runtimes, including Node.js 18+, Bun, Cloudflare Workers, and browsers.
 
 ```ts
 import { ungarble } from "ungarble";
@@ -36,7 +36,7 @@ When text is read with the wrong character encoding, you get mojibake. Character
 
 ### `ungarble(text, options?)`
 
-The main function. Takes garbled text, returns fixed text. Safe to call on any string, valid text passes through unchanged.
+Takes garbled text and returns fixed text.
 
 ```ts
 ungarble("cafÃ©")  // -> "café"
@@ -107,12 +107,10 @@ ungarble(text, { limit: 10_000_000 }) // reject input over 10 million UTF-16 cod
 | `ligatures` | `boolean` | `false` | Expand ligatures (ﬁ -> fi) |
 | `width` | `boolean` | `false` | Normalize fullwidth characters |
 | `normalization` | `"NFC" \| "NFD" \| "NFKC" \| "NFKD" \| false` | `"NFC"` | Unicode normalization form |
-| `chunk` | `number` | `1,000,000` | Maximum number of UTF-16 code units processed in one repair chunk |
+| `chunk` | `number` | `1,000,000` | Target repair chunk length in UTF-16 code units; boundaries may extend by up to 4,096 units |
 | `limit` | `number` | Unlimited | Maximum accepted input length in UTF-16 code units; throws `RangeError` when exceeded |
 
-`limit` is disabled by default, so `ungarble` accepts input of any length. Applications that process untrusted data should usually check its size before calling `ungarble` and set an appropriate limit for their environment.
-
-Both `limit` and `chunk` measure JavaScript UTF-16 code units, not bytes. For HTTP requests, file uploads, and similar inputs, enforce a byte-size limit at the input boundary before converting the data to a string.
+For untrusted input, set `limit` (UTF-16 code units; unlimited by default). The individual fixers, `detect`, and `score` do not accept this option; check input length before calling them with untrusted text. Pathological normalization, chunk boundaries, or repair recursion can throw `RangeError`. Repair does not sanitize text; validate or escape the output for its destination.
 
 ## Supported encodings
 
