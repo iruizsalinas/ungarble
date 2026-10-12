@@ -25,12 +25,16 @@ export const LIGATURES = new Map<number, string>([
   [0x0149, "\u02bcn"],
 ]);
 
+// Like ftfy, map every halfwidth and fullwidth form (fullwidth ASCII and
+// currency signs, halfwidth katakana, Hangul and symbols) to its standard
+// NFKC form. U+3000 IDEOGRAPHIC SPACE becomes an ASCII space as well.
 export function buildWidthMap(): Map<number, string> {
-  const map = new Map<number, string>();
-  for (let cp = 0xff01; cp <= 0xff5e; cp++) {
-    map.set(cp, String.fromCharCode(cp - 0xff01 + 0x21));
+  const map = new Map<number, string>([[0x3000, " "]]);
+  for (let cp = 0xff01; cp <= 0xffef; cp++) {
+    const char = String.fromCharCode(cp);
+    const standard = char.normalize("NFKC");
+    if (standard !== char) map.set(cp, standard);
   }
-  map.set(0x3000, " ");
   return map;
 }
 

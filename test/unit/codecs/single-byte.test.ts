@@ -7,10 +7,8 @@ describe("single-byte codecs", () => {
     for (let byte = 0; byte < 256; byte++) {
       const decoded = decodeSingleByte(new Uint8Array([byte]), encoding);
       expect(possibleEncoding(decoded, encoding)).toBe(true);
-      const encoded = encodeSingleByte(decoded, encoding);
-      expect(encoded).not.toBeNull();
-      // Some code pages intentionally contain duplicate mappings: first wins.
-      expect(decodeSingleByte(encoded!, encoding)).toBe(decoded);
+      // Undefined bytes fall back to Latin-1, so no two bytes share a character.
+      expect([...encodeSingleByte(decoded, encoding) ?? []]).toEqual([byte]);
     }
     expect(encodeSingleByte("😀", encoding)).toBeNull();
     expect(encodeSingleByte("\ud800", encoding)).toBeNull();

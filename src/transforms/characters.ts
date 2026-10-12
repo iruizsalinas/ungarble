@@ -10,30 +10,22 @@ export function uncurlQuotes(text: string): string {
     .replace(DOUBLE_QUOTE_RE, '"');
 }
 
+// Both maps hold only BMP code points, so a class without the u flag matches
+// them exactly and never splits a surrogate pair.
+function charClassRegExp(map: Map<number, string>): RegExp {
+  const units = [...map.keys()].map((cp) => "\\u" + cp.toString(16).padStart(4, "0"));
+  return new RegExp(`[${units.join("")}]`, "g");
+}
+
+const LIGATURE_RE = charClassRegExp(LIGATURES);
+
+const WIDTH_RE = charClassRegExp(WIDTH_MAP);
+
+// Replace matches in place instead of collecting one string per character.
 export function fixLatinLigatures(text: string): string {
-  const result: string[] = [];
-  for (const char of text) {
-    const cp = char.codePointAt(0)!;
-    const replacement = LIGATURES.get(cp);
-    if (replacement !== undefined) {
-      result.push(replacement);
-    } else {
-      result.push(char);
-    }
-  }
-  return result.join("");
+  return text.replace(LIGATURE_RE, (char) => LIGATURES.get(char.charCodeAt(0)) ?? char);
 }
 
 export function fixCharacterWidth(text: string): string {
-  const result: string[] = [];
-  for (const char of text) {
-    const cp = char.codePointAt(0)!;
-    const replacement = WIDTH_MAP.get(cp);
-    if (replacement !== undefined) {
-      result.push(replacement);
-    } else {
-      result.push(char);
-    }
-  }
-  return result.join("");
+  return text.replace(WIDTH_RE, (char) => WIDTH_MAP.get(char.charCodeAt(0)) ?? char);
 }

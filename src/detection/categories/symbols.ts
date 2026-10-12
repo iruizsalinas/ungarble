@@ -52,13 +52,14 @@ export const startPunct =
 
 // Apple logo
 
-// Closing/end punctuation
+// Closing/end punctuation. The right single quote is "common" instead: as an
+// apostrophe it follows accented letters in valid French elisions and English
+// possessives.
 export const endPunct =
   "\u00ae" + // registered
   "\u00bb" + // right guillemet
   "\u02dd" + // double acute
   "\u201d" + // right double quote
-  "\u2019" + // right single quote
   "\u203a" + // right single angle quote
   "\u2122";
 

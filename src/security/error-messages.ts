@@ -1,4 +1,4 @@
-import { MAX_BOUNDARY_LOOKAHEAD, MAX_NORMALIZATION_MARKS, MAX_REPAIR_DEPTH } from "./budgets.js";
+import { MAX_BOUNDARY_LOOKAHEAD, MAX_REPAIR_DEPTH } from "./budgets.js";
 
 // Sentence case, double-quoted option names, and final periods.
 export const ERROR_MESSAGES = Object.freeze({
@@ -8,9 +8,6 @@ export const ERROR_MESSAGES = Object.freeze({
     `Input length ${length} exceeds the configured limit of ${limit} UTF-16 code units.`,
   chunkBoundary:
     `Chunk boundary exceeds the allowed lookahead of ${MAX_BOUNDARY_LOOKAHEAD} UTF-16 code units.`,
-  normalization:
-    `Normalization exceeds the limit of ${MAX_NORMALIZATION_MARKS} consecutive decomposed marks. ` +
-    'Set "normalization" to false to preserve the text.',
   recursion:
     `Encoding repair exceeds the recursion limit of ${MAX_REPAIR_DEPTH} nested calls.`,
 });

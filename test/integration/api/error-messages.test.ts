@@ -21,10 +21,6 @@ const cases: Array<{ name: string; input: string; options: UngarbleConfig; error
     name: "chunk lookahead", input: "&amp;".repeat(1000), options: { chunk: 1 },
     error: new RangeError("Chunk boundary exceeds the allowed lookahead of 4096 UTF-16 code units."),
   },
-  {
-    name: "normalization", input: "a" + "\u0315".repeat(257), options: {},
-    error: new RangeError('Normalization exceeds the limit of 256 consecutive decomposed marks. Set "normalization" to false to preserve the text.'),
-  },
 ];
 
 describe("error message contract", () => {

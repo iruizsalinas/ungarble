@@ -24,6 +24,10 @@ export function _ungarble(text: string, options?: UngarbleConfig, steps?: Explan
     recordApplyStep(steps, "line_breaks", text, normalized);
   }
 
+  // Lone surrogates can only come from the input. Replace them before repair,
+  // so encoding repair sees the same text as a second call would.
+  if (config.surrogates) normalized = applyAndRecord(normalized, steps, "surrogates", fixSurrogates);
+
   const segmentConfig = { ...config, lines: false, surrogates: false, normalization: false as const };
   let fixed = fixTextLines(normalized, segmentConfig, steps);
 

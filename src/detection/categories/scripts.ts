@@ -74,4 +74,5 @@ export const common =
   "\u2014" + // em dash
   "\u2015" + // horizontal bar
   "\u2026" + // ellipsis
+  "\u2019" + // right single quote
   "\u2044";

@@ -1,4 +1,4 @@
-import { utf8MojibakeSequenceLengthAt, isUtf8MojibakeByteChar } from "../../detection/utf8-sequences.js";
+import { utf8MojibakeSequenceLengthAt, isUtf8MojibakeByteChar, isLatinExtendedAdditional } from "../../detection/utf8-sequences.js";
 
 export const TOKEN_BOUNDARY_RE = /[\s"'`()[\]{}<>&|\\/:;!?]/u;
 
@@ -32,7 +32,8 @@ export function isTokenBoundary(text: string, index: number): boolean {
     code === 0x2026 ||
     (quoteLike && !adjacentReplacement && !quoteCompletesMojibake) ||
     (code >= 0x80 && code <= 0x9f) ||
-    (code > 0x052f && code !== 0xfffd && !isUtf8MojibakeByteChar(text[index])) ||
+    (code > 0x052f && code !== 0xfffd && !isLatinExtendedAdditional(code) &&
+      !isUtf8MojibakeByteChar(text[index])) ||
     TOKEN_BOUNDARY_RE.test(text[index]!)
   );
 }

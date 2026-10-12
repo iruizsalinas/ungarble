@@ -10,25 +10,13 @@ export function fixLineBreaks(text: string): string {
     .replace(/\u2029/g, "\n");
 }
 
+// A high surrogate not followed by a low one, or a low surrogate not preceded
+// by a high one. Without the u flag, the classes match single code units.
+export const LONE_SURROGATE_RE = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g;
+
 export function fixSurrogates(text: string): string {
-  const result: string[] = [];
-  for (let i = 0; i < text.length; i++) {
-    const code = text.charCodeAt(i);
-    if (code >= 0xd800 && code <= 0xdbff) {
-      const next = i + 1 < text.length ? text.charCodeAt(i + 1) : 0;
-      if (next >= 0xdc00 && next <= 0xdfff) {
-        result.push(text[i]! + text[i + 1]!);
-        i++;
-      } else {
-        result.push("\ufffd");
-      }
-    } else if (code >= 0xdc00 && code <= 0xdfff) {
-      result.push("\ufffd");
-    } else {
-      result.push(text[i]!);
-    }
-  }
-  return result.join("");
+  // A regex replacement allocates only the result, not one string per unit.
+  return text.replace(LONE_SURROGATE_RE, "\ufffd");
 }
 
 export function removeControlChars(text: string): string {

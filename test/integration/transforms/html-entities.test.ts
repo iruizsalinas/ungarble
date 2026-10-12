@@ -39,6 +39,17 @@ describe("HTML entity handling", () => {
     expect(ungarble("&amp;amp;amp;")).toBe("&");
   });
 
+  it("decodes an escaped-again entity fully on long lines, whatever the chunk size", () => {
+    // Each level used to cost a pipeline pass over the whole line, so the line's
+    // work budget stopped long lines partway through the chain.
+    const prefix = "a".repeat(2000);
+    const text = prefix + "&" + "amp;".repeat(10) + "lt;";
+    for (const options of [undefined, { chunk: 100 }, { chunk: 7 }]) {
+      expect(ungarble(text, options)).toBe(prefix + "<");
+    }
+    expect(ungarble.explain(text).steps.filter((step) => step.detail === "html")).toHaveLength(1);
+  });
+
   it("handles euro numeric entity", () => {
     expect(ungarble.html("euro &#x80;")).toBe("euro €");
   });

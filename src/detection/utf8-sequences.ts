@@ -26,6 +26,11 @@ export function utf8MojibakeSequenceLengthAt(text: string, index: number): numbe
   return 0;
 }
 
+/** Latin Extended Additional letters (Vietnamese, Yoruba) are word characters. */
+export function isLatinExtendedAdditional(code: number): boolean {
+  return code >= 0x1e00 && code <= 0x1eff;
+}
+
 export function isUtf8MojibakeByteChar(char: string | undefined): boolean {
   if (char === undefined) return false;
   const cp = char.codePointAt(0);

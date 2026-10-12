@@ -6,7 +6,7 @@ import { safeChunkEnd } from "../chunking/boundary.js";
 import { needsAnotherChunkPass } from "./signals.js";
 import { OSC_TERMINAL_ESCAPE_RE } from "../transforms/escapes.js";
 
-import { MAX_REPAIR_PASSES } from "../security/budgets.js";
+import { MAX_REPAIR_PASSES, createWorkBudget, startPass } from "../security/budgets.js";
 
 export function fixTextSegment(
   text: string,
@@ -14,17 +14,19 @@ export function fixTextSegment(
   steps?: ExplanationStep[],
 ): string {
   const maxLen = normalizedMaxDecodeLength(config.chunk, DEFAULT_CONFIG.chunk);
+  // One budget per line bounds the chunk, pipeline and encoding passes together.
+  const budget = createWorkBudget(text.length);
   if (text.length <= maxLen) {
-    return applyFixPipeline(text, config, steps);
+    return applyFixPipeline(text, config, steps, budget);
   }
 
   let current = text;
-  for (let iteration = 0; iteration < MAX_REPAIR_PASSES; iteration++) {
+  for (let iteration = 0; iteration < MAX_REPAIR_PASSES && startPass(budget, iteration, current.length); iteration++) {
     const chunks: string[] = [];
     let pos = 0;
     while (pos < current.length) {
       const end = safeChunkEnd(current, pos, maxLen, config);
-      chunks.push(applyFixPipeline(current.slice(pos, end), config, steps));
+      chunks.push(applyFixPipeline(current.slice(pos, end), config, steps, budget));
       pos = end;
     }
 
@@ -35,7 +37,7 @@ export function fixTextSegment(
     if (!needsAnotherChunkPass(current, config)) break;
 
     if (current.length <= maxLen) {
-      return applyFixPipeline(current, config, steps);
+      return applyFixPipeline(current, config, steps, budget);
     }
   }
 

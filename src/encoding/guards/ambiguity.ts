@@ -1,4 +1,4 @@
-import { hasC1ByteChar, isSingleAmbiguousScriptChar } from "./characters.js";
+import { codePointStringAt, hasC1ByteChar, isSingleAmbiguousScriptChar } from "./characters.js";
 
 export function isAmbiguousSingleNonLatinMojibakeSource(text: string): boolean {
   if (text.length < 2 || text.length > 4 || hasC1ByteChar(text)) return false;
@@ -29,7 +29,7 @@ export function startsWithAmbiguousSingleNonLatinMojibake(text: string, decoded:
     const source = text.slice(0, sourceLength);
     if (hasC1ByteChar(source)) continue;
 
-    const decodedFirst = [...decoded][0] ?? "";
+    const decodedFirst = codePointStringAt(decoded, 0);
     if (
       isSingleAmbiguousScriptChar(decodedFirst) &&
       decoded.slice(decodedFirst.length) === text.slice(sourceLength)
@@ -55,7 +55,7 @@ export function containsAmbiguousSingleNonLatinMojibakeReplacement(text: string,
     const source = text.slice(index, index + sourceLength);
     if (hasC1ByteChar(source)) continue;
 
-    const decodedFirst = [...decoded.slice(index)][0] ?? "";
+    const decodedFirst = codePointStringAt(decoded, index);
     if (
       isSingleAmbiguousScriptChar(decodedFirst) &&
       decoded.slice(index + decodedFirst.length) === text.slice(index + sourceLength)

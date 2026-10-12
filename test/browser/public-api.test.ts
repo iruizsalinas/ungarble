@@ -20,7 +20,8 @@ describe("browser build", () => {
   });
 
   it("enforces resource guards in the browser build", () => {
-    expect(() => ungarble("a" + "\u0315".repeat(257))).toThrow(RangeError);
+    const marks = "a" + "\u0301\u0316".repeat(129);
+    expect(ungarble(marks)).toBe(marks);
     expect(() => ungarble("&amp;".repeat(1000), { chunk: 1 })).toThrow(RangeError);
     expect(() => ungarble("abcd", { limit: 3 })).toThrow(RangeError);
   });

@@ -32,6 +32,12 @@ describe("Unicode transformation properties", () => {
     }
   });
 
+  it("maps halfwidth and fullwidth forms to standard width", () => {
+    expect(ungarble.width("￥１２３ ￡ ￠ ｶﾀｶﾅ ｡｢ﾃｽﾄ｣ ￩￫ ￭")).toBe("¥123 £ ¢ カタカナ 。「テスト」 ←→ ■");
+    expect(ungarble("ｶﾞｷﾞ ￥500", { width: true })).toBe("ガギ ¥500");
+    expect(ungarble("ｶﾞｷﾞ ￥500")).toBe("ｶﾞｷﾞ ￥500");
+  });
+
   it.each(["👨‍👩‍👧‍👦", "🏳️‍🌈", "👍🏽", "🇫🇷", "1️⃣", "العربية", "עברית", "किताब"])
     ("preserves valid script and emoji sequence %s", input => {
       expect(ungarble(input)).toBe(input);

@@ -30,7 +30,7 @@ When text is read with the wrong character encoding, you get mojibake. Character
 - Detects the specific encoding pair (UTF-8 misread as Latin-1, Windows-1252, ISO-8859-2, MacRoman, CP437, and more)
 - Handles double and triple encoding (text garbled multiple times)
 - Fixes mixed-encoding strings (mojibake embedded in otherwise clean text)
-- Never corrupts valid text. If unsure, leaves input unchanged
+- Designed to leave valid text alone. If unsure, leaves input unchanged
 
 ## API
 
@@ -76,7 +76,7 @@ ungarble.encoding(text)    // encoding errors only, no other cleanup
 ungarble.html(text)        // decode HTML entities
 ungarble.quotes(text)      // curly quotes -> straight
 ungarble.ligatures(text)   // ﬁ -> fi
-ungarble.width(text)       // fullwidth -> normal
+ungarble.width(text)       // ＡＢＣ, ｶﾀｶﾅ -> ABC, カタカナ
 ungarble.lines(text)       // normalize line breaks
 ungarble.surrogates(text)  // fix surrogate pairs
 ungarble.escapes(text)     // strip ANSI escapes
@@ -99,18 +99,20 @@ ungarble(text, { limit: 10_000_000 }) // reject input over 10 million UTF-16 cod
 | `encoding` | `boolean` | `true` | Detect and fix encoding errors |
 | `html` | `boolean \| "auto"` | `"auto"` | Decode HTML entities. Auto disables when `<` is present |
 | `lines` | `boolean` | `true` | Normalize line breaks to `\n` |
-| `controls` | `boolean` | `true` | Remove zero-width and control characters |
+| `controls` | `boolean` | `true` | Remove control characters and byte-order marks (keeps tabs and line breaks) |
 | `escapes` | `boolean` | `true` | Strip ANSI terminal escape sequences |
 | `surrogates` | `boolean` | `true` | Fix unpaired UTF-16 surrogates |
 | `c1` | `boolean` | `true` | Convert C1 control chars to Windows-1252 equivalents |
 | `quotes` | `boolean` | `false` | Convert curly quotes to straight quotes |
 | `ligatures` | `boolean` | `false` | Expand ligatures (ﬁ -> fi) |
-| `width` | `boolean` | `false` | Normalize fullwidth characters |
-| `normalization` | `"NFC" \| "NFD" \| "NFKC" \| "NFKD" \| false` | `"NFC"` | Unicode normalization form |
-| `chunk` | `number` | `1,000,000` | Target repair chunk length in UTF-16 code units; boundaries may extend by up to 4,096 units |
+| `width` | `boolean` | `false` | Normalize halfwidth and fullwidth forms |
+| `normalization` | `"NFC" \| "NFD" \| "NFKC" \| "NFKD" \| false` | `"NFC"` | Unicode normalization form. A character followed by more than 256 combining marks is left as it is |
+| `chunk` | `number` | `1,000,000` | Target repair chunk length in UTF-16 code units; boundaries may extend by up to 4,096 units. Very small chunks give the repair less context |
 | `limit` | `number` | Unlimited | Maximum accepted input length in UTF-16 code units; throws `RangeError` when exceeded |
 
-For untrusted input, set `limit` (UTF-16 code units; unlimited by default). The individual fixers, `detect`, and `score` do not accept this option; check input length before calling them with untrusted text. Pathological normalization, chunk boundaries, or repair recursion can throw `RangeError`. Repair does not sanitize text; validate or escape the output for its destination.
+For untrusted input, set `limit` (UTF-16 code units; unlimited by default). Repeated repair passes over a line share a fixed work budget, so crafted text cannot multiply the number of passes; text that needs more passes than the budget allows, such as mojibake nested many times over, comes back partly repaired. Text made almost entirely of mojibake-like characters still costs far more per character than ordinary text, and more in JavaScriptCore (Bun, Safari) than in V8 (Node.js, Deno, Chrome), so time your own worst-case inputs on your runtime before choosing a limit. Calls are synchronous: run large untrusted inputs in a worker if a stall matters. The individual fixers, `detect`, and `score` do not accept `limit`; check input length before calling them with untrusted text. Pathological chunk boundaries or repair recursion can throw `RangeError`.
+
+Repair does not sanitize text, and its output can contain markup that the input did not: it decodes HTML entities, including nested ones such as `&amp;lt;`, and removing control characters or terminal escapes can join `<scr\0ipt>` into `<script>`. Run `ungarble` before validating or escaping text for its destination, never after.
 
 ## Supported encodings
 

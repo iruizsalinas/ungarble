@@ -27,21 +27,28 @@ describe("adversarial input", () => {
   }
 
   for (const normalization of ["NFC", "NFD", "NFKC", "NFKD"] as const) {
-    it(`bounds decomposed mark runs for ${normalization}`, () => {
+    it(`keeps overlong decomposed mark runs as they are for ${normalization}`, () => {
       const input = "a" + "\u0315".repeat(128) + "\u0300".repeat(128);
       expect(ungarble(input, { normalization })).toBe(input.normalize(normalization));
-      expect(() => ungarble(input + "\u0300", { normalization })).toThrow(RangeError);
+      // One more mark would make native reordering quadratic. Keep that
+      // combining sequence unchanged, without throwing on ordinary Zalgo text,
+      // and still normalize the text around it.
+      const long = input + "\u0300";
+      expect(ungarble(long, { normalization })).toBe(long);
+      expect(ungarble.explain(long, { normalization }).text).toBe(long);
+      expect(ungarble("e\u0301 " + long + " e\u0301", { normalization }))
+        .toBe("e\u0301 ".normalize(normalization) + long + " e\u0301".normalize(normalization));
       // U+0344 decomposes into two marks. Check after decomposition too.
-      expect(() => ungarble("\u0344".repeat(129), { normalization })).toThrow(RangeError);
-      expect(() => ungarble.explain(input + "\u0300", { normalization })).toThrow(RangeError);
+      expect(ungarble("\u0344".repeat(129), { normalization })).toBe("\u0344".repeat(129));
       expect(ungarble(("a" + "\u0300".repeat(200)).repeat(5), { normalization }))
         .toBe(("a" + "\u0300".repeat(200)).repeat(5).normalize(normalization));
     });
   }
 
   it("checks marks introduced by HTML decoding", () => {
-    expect(() => ungarble("&#x315;".repeat(257))).toThrow(RangeError);
-    expect(ungarble("&#x315;".repeat(257), { normalization: false })).toBe("\u0315".repeat(257));
+    // Normalizing would reorder these marks; the overlong run stays as decoded.
+    expect(ungarble("&#x301;&#x316;".repeat(129))).toBe("\u0301\u0316".repeat(129));
+    expect(ungarble("&#x301;&#x316;".repeat(128))).toBe("\u0316".repeat(128) + "\u0301".repeat(128));
   });
 
   it("preserves spaced initials while repairing ordinary altered spaces", () => {

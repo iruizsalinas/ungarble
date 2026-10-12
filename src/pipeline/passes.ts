@@ -3,19 +3,20 @@ import { type ExplanationStep } from "../types.js";
 import { applyAndRecord, recordApplyStep } from "./record.js";
 import { unescapeHtml } from "../transforms/html.js";
 import { removeTerminalEscapes } from "../transforms/escapes.js";
-import { fixEncodingAndExplain, fixEncoding } from "../encoding/repair.js";
+import { fixEncodingAndExplain, fixEncodingWithin } from "../encoding/repair.js";
 import { fixC1Controls } from "../transforms/c1.js";
 import { fixLatinLigatures, fixCharacterWidth, uncurlQuotes } from "../transforms/characters.js";
 import { fixLineBreaks, fixSurrogates, removeControlChars } from "../transforms/unicode.js";
 import { normalizeSafely } from "../security/normalization.js";
 import { needsAnotherPipelinePass } from "./signals.js";
 
-import { MAX_REPAIR_PASSES } from "../security/budgets.js";
+import { MAX_REPAIR_PASSES, type WorkBudget, createWorkBudget, startPass } from "../security/budgets.js";
 
 export function applyFixPipeline(
   text: string,
   config: Required<UngarbleConfig>,
   steps?: ExplanationStep[],
+  budget: WorkBudget = createWorkBudget(text.length),
 ): string {
   let current = text;
 
@@ -26,7 +27,7 @@ export function applyFixPipeline(
     shouldHtml = !current.includes("<");
   }
 
-  for (let iteration = 0; iteration < MAX_REPAIR_PASSES; iteration++) {
+  for (let iteration = 0; iteration < MAX_REPAIR_PASSES && startPass(budget, iteration, current.length); iteration++) {
     const prev = current;
 
     if (shouldHtml) {
@@ -39,11 +40,11 @@ export function applyFixPipeline(
 
     if (config.encoding) {
       if (steps) {
-        const result = fixEncodingAndExplain(current);
+        const result = fixEncodingAndExplain(current, budget);
         current = result.text;
         steps.push(...result.steps);
       } else {
-        current = fixEncoding(current);
+        current = fixEncodingWithin(current, budget);
       }
     }
 

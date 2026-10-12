@@ -14,7 +14,7 @@ try {
   const initials = 'A '.repeat(256000) + 'x \u00c3 z \u0100';
   assert.equal(ungarble(initials), 'A '.repeat(256000) + 'x \u00e0 z \u0100');
   const marks = 'a' + '\u0315'.repeat(64000) + '\u0300'.repeat(64000);
-  assert.throws(() => ungarble(marks), RangeError);
+  assert.equal(ungarble(marks), marks);
   assert.equal(ungarble(marks, { normalization: false }), marks);
   for (const input of ['\x1b[' + '1;'.repeat(100000), '\x1b]' + 'a'.repeat(100000), '\x1b]a'.repeat(100000)]) {
     assert.equal(ungarble.escapes(input), input);
@@ -33,8 +33,28 @@ try {
   assert.equal(ungarble.encoding(utf8Pairs).endsWith('!'), true);
   // A caller-controlled tiny chunk size must still terminate on large inputs.
   assert.equal(ungarble('a'.repeat(100000), { chunk: 1 }), 'a'.repeat(100000));
-  assert.equal(ungarble('&' + 'amp;'.repeat(20000) + 'lt;').length, 80004 - 80);
+  // A chain of escaped ampersands decodes where it stands, in one pass.
+  assert.equal(ungarble('&' + 'amp;'.repeat(20000) + 'lt;'), '<');
   assert.equal(ungarble('\ud800'.repeat(100000)), '\ufffd'.repeat(100000));
+  // Every detector match inside one damaged token used to revalidate the whole
+  // token: quadratic, about 25 seconds for this line.
+  const token = 'a \ufffd' + '\u00c2\u2591x'.repeat(16000) + '\ufffd';
+  assert.equal(ungarble(token), token);
+  assert.equal(ungarble.encoding(token), token);
+  // Each repair pass resolves one link of the chain, and chunk, pipeline and
+  // encoding passes used to multiply into thousands of passes over the line.
+  const soup = '\u00c2\u2591 \u00c3\u2592 \u00c2\u2264 \u00c3\u2310 \u00c2\u2560 '.repeat(300);
+  const chain = soup + '\u00c3' + '\u00c2'.repeat(8000) + '\u00a9';
+  assert.equal(ungarble(chain).startsWith(soup), true);
+  // Decoding the innermost reference completes the next one out (&#6&#48;; is
+  // &#60;), so each level needs another pipeline pass.
+  let nested = '&#60;';
+  for (let level = 1; level < 400; level++) {
+    const at = nested.indexOf(';') - 1;
+    nested = nested.slice(0, at) + '&#' + nested.charCodeAt(at) + ';' + nested.slice(at + 1);
+  }
+  const nestedChunks = (soup + nested + ' ').repeat(4);
+  assert.equal(ungarble(nestedChunks, { chunk: 4000 }).startsWith(soup), true);
 
   let seed = 0x12345678;
   const rand = () => (seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0);

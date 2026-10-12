@@ -8,8 +8,19 @@ export function hasC1ByteChar(text: string): boolean {
   return false;
 }
 
+/** The code point at an index as a string, without spreading the whole text. */
+export function codePointStringAt(text: string, index: number): string {
+  const cp = text.codePointAt(index);
+  return cp === undefined ? "" : String.fromCodePoint(cp);
+}
+
+// One code point spans at most two UTF-16 units; check that before spreading.
+function isSingleCodePoint(text: string): boolean {
+  return text.length > 0 && text.length <= 2 && [...text].length === 1;
+}
+
 export function isSingleAmbiguousScriptChar(text: string): boolean {
-  if ([...text].length !== 1) return false;
+  if (!isSingleCodePoint(text)) return false;
   const cp = text.codePointAt(0);
   return cp !== undefined &&
     cp > 0x052f &&
@@ -22,7 +33,7 @@ export function isSingleAmbiguousScriptChar(text: string): boolean {
 }
 
 export function isSingleAmbiguousLatinChar(text: string): boolean {
-  if ([...text].length !== 1) return false;
+  if (!isSingleCodePoint(text)) return false;
   const cp = text.codePointAt(0);
   return cp !== undefined && (
     (cp >= 0x00c0 && cp <= 0x024f) ||

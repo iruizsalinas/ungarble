@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decodeUtf8, encodeUtf8 } from "../../../src/codecs/utf8.js";
+import { decodeUtf8, encodeUtf8, isValidUtf8 } from "../../../src/codecs/utf8.js";
 import { decodeUtf8Variants } from "../../../src/codecs/utf8-variants.js";
 
 describe("UTF-8 boundaries", () => {
@@ -17,6 +17,23 @@ describe("UTF-8 boundaries", () => {
   ])("rejects malformed bytes %j", (...bytes) => {
     expect(decodeUtf8(Uint8Array.from(bytes))).toBeNull();
     expect(decodeUtf8Variants(Uint8Array.from(bytes))).toBeNull();
+  });
+
+  it("validates exactly like a fatal TextDecoder", () => {
+    const decoder = new TextDecoder("utf-8", { fatal: true });
+    const check = (bytes: number[]) => {
+      let valid = true;
+      try { decoder.decode(Uint8Array.from(bytes)); } catch { valid = false; }
+      expect(isValidUtf8(Uint8Array.from(bytes)), JSON.stringify(bytes)).toBe(valid);
+    };
+    for (let a = 0; a < 256; a++) for (let b = 0; b < 256; b++) check([a, b]);
+    const edges = [0x7f, 0x80, 0x8f, 0x90, 0x9f, 0xa0, 0xbf, 0xc0];
+    for (let lead = 0xe0; lead <= 0xf5; lead++) {
+      for (const b of edges) for (const c of edges) {
+        check([lead, b, c]);
+        for (const d of edges) check([lead, b, c, d]);
+      }
+    }
   });
 
   it("only permits the explicit modified UTF-8 and CESU-8 exceptions", () => {

@@ -2,7 +2,7 @@ import { selectRepairSegment } from "./tokens/select-segment.js";
 import { acceptMatchRepair } from "./guards/accept-match.js";
 import { findUtf8MojibakeSequences } from "../detection/utf8-pattern.js";
 import { tokenReader, hasSpacedInitialsBefore } from "./tokens/reader.js";
-import { countUtf8MojibakeSequences, isCurlyPossessiveMatch } from "./guards/partial.js";
+import { countUtf8MojibakeSequences, hasLossySignal, hasReplacementSignal, isCurlyPossessiveMatch } from "./guards/partial.js";
 import { hasConfidentDecodedScript } from "./guards/scripts.js";
 import { isAmbiguousSingleNonLatinMojibakeSource } from "./guards/ambiguity.js";
 import { isBad } from "../detection/badness.js";
@@ -15,6 +15,11 @@ export function decodeInconsistentUtf8(
 ): string {
   let result = "";
   let lastIndex = 0;
+  // Every detector match inside one token selects the same token segment and
+  // gets the same verdict. Remember the last segment evaluated so later matches
+  // skip it, instead of revalidating the whole token once per match.
+  let seenStart = -1;
+  let seenEnd = -1;
   const fixedSegments = new Map<string, string>();
   const fixedMatches = new Map<string, string>();
   const tokenAround = tokenReader(text);
@@ -28,16 +33,22 @@ export function decodeInconsistentUtf8(
     // evidence even when the badness table does not cover the target script.
     // Decode it directly instead of recursively calling fixEncoding unchanged.
     if (matchStr.length >= text.length) {
-      const lossySignal = matchStr.length >= 3 && /[ \ufffd]/u.test(matchStr);
+      const lossySignal = hasReplacementSignal(matchStr);
+      // A space may stand in for a lost NBSP byte, but that alone is weak
+      // evidence: a Cyrillic or accented Latin letter, a space and punctuation
+      // also restore to a CJK character.
+      const spaceSignal = matchStr.length >= 3 && matchStr.includes(" ");
       if (
         !/^[\p{Script=Cyrillic}]+$/u.test(matchStr) &&
         (
           countUtf8MojibakeSequences(matchStr) >= 2 ||
-          lossySignal
+          lossySignal ||
+          spaceSignal
         )
       ) {
         const fixed = decodeMatchFn(matchStr);
-        if (fixed !== matchStr && (lossySignal || hasConfidentDecodedScript(fixed))) return fixed;
+        const confident = hasConfidentDecodedScript(fixed);
+        if (fixed !== matchStr && (lossySignal || (spaceSignal ? !confident : confident))) return fixed;
       }
       continue;
     }
@@ -45,7 +56,9 @@ export function decodeInconsistentUtf8(
     if (isCurlyPossessiveMatch(text, matchIndex, matchStr)) continue;
 
     const matchIsBad = isBad(matchStr);
-    const lossySignal = matchStr.length >= 3 && /[ \ufffd]/u.test(matchStr);
+    // A space between a word and punctuation is ordinary prose unless a
+    // replacement character shows that bytes were lost.
+    const lossySignal = hasLossySignal(text, matchIndex, matchStr);
     const embeddedInAsciiWord =
       matchStr[0] === "\u00c3" &&
       /[A-Za-z]/u.test(text[matchIndex - 1] ?? "") &&
@@ -82,6 +95,9 @@ export function decodeInconsistentUtf8(
     const { segmentStart, segmentEnd, segmentStr, decodeMatchOnly } = segment;
     if (segmentStr.length >= text.length) continue;
     if (segmentStart < lastIndex) continue;
+    if (segmentStart === seenStart && segmentEnd === seenEnd) continue;
+    seenStart = segmentStart;
+    seenEnd = segmentEnd;
 
     // Skip spaced-out initials such as "C O N C L U S [C3] O" without
     // suppressing ordinary prose that happens to precede an altered NBSP.
