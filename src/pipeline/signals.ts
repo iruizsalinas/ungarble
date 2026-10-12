@@ -13,7 +13,10 @@ export function needsAnotherPipelinePass(
   config: Required<UngarbleConfig>,
   shouldHtml: boolean,
 ): boolean {
-  return shouldHtml && config.html !== false && hasHtmlEntity(current);
+  if (shouldHtml && config.html !== false && hasHtmlEntity(current)) return true;
+  // Cleanup (especially control removal and width folding) can join or reveal
+  // byte sequences after this pass's encoding repair has already run.
+  return config.encoding && (isBad(current) || hasUtf8MojibakeSequence(current));
 }
 
 export function needsAnotherChunkPass(text: string, config: Required<UngarbleConfig>): boolean {

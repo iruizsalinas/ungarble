@@ -7,7 +7,11 @@ import { fixTextLines } from "./segments.js";
 import { normalizeSafely } from "../security/normalization.js";
 
 export function _ungarble(text: string, options?: UngarbleConfig, steps?: ExplanationStep[]): string {
-  const config = { ...DEFAULT_CONFIG, ...options };
+  // Optional properties explicitly set to undefined still use their defaults.
+  const overrides = Object.fromEntries(
+    Object.entries(options ?? {}).filter(([, value]) => value !== undefined),
+  );
+  const config = { ...DEFAULT_CONFIG, ...overrides };
   enforceInputLimit(text, config.limit);
 
   if (config.html === "auto") {

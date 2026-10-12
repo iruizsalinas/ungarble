@@ -33,6 +33,12 @@ export function readTerminalEscapeEnd(text: string, start: number, limit: number
 
 export function extendTerminalEscapeBoundary(text: string, pos: number, end: number, limit: number): number {
   let escIndex = lastIndexOfFrom(text, "\x1b", end - 1, pos);
+  // At OSC's ESC + backslash terminator, the last ESC belongs to the
+  // terminator. Find the opener to keep it and its optional wrapper together.
+  if (escIndex >= pos && text[escIndex + 1] === "\\" && escIndex + 2 >= end) {
+    const opener = lastIndexOfFrom(text, "\x1b", escIndex - 1, pos);
+    if (opener >= pos && text[opener + 1] === "]") escIndex = opener;
+  }
   if (escIndex < pos && text[end - 1] === "\x01" && text[end] === "\x1b") {
     escIndex = end;
   }

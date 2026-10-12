@@ -4,6 +4,7 @@ import { normalizedMaxDecodeLength } from "../chunking/budget.js";
 import { applyFixPipeline } from "./passes.js";
 import { safeChunkEnd } from "../chunking/boundary.js";
 import { needsAnotherChunkPass } from "./signals.js";
+import { OSC_TERMINAL_ESCAPE_RE } from "../transforms/escapes.js";
 
 import { MAX_REPAIR_PASSES } from "../security/budgets.js";
 
@@ -46,9 +47,18 @@ export function fixTextLines(
   text: string, config: Required<UngarbleConfig>, steps?: ExplanationStep[],
 ): string {
   const lines: string[] = [];
+  // OSC payloads can contain newlines. Keep complete sequences together so
+  // cleanup sees both delimiters; chunking still enforces its lookahead budget.
+  const escapes = config.escapes ? text.matchAll(OSC_TERMINAL_ESCAPE_RE) : undefined;
+  let escape = escapes?.next();
   let start = 0;
   for (;;) {
-    const newline = text.indexOf("\n", start);
+    let newline = text.indexOf("\n", start);
+    while (newline !== -1 && escape && !escape.done && escape.value.index <= newline) {
+      const escapeEnd = escape.value.index + escape.value[0].length;
+      if (escapeEnd > newline) newline = text.indexOf("\n", escapeEnd);
+      escape = escapes!.next();
+    }
     const end = newline === -1 ? text.length : newline;
     lines.push(fixTextSegment(text.slice(start, end), config, steps));
     if (newline === -1) break;

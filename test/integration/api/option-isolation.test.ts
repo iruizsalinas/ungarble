@@ -14,6 +14,16 @@ const cases: Array<[keyof UngarbleConfig, string, string]> = [
 ];
 
 describe("option isolation", () => {
+  it.each(cases)("uses the default when %s is explicitly undefined", (option, input) => {
+    const options = Object.freeze({ [option]: undefined });
+    expect(ungarble(input, options)).toBe(ungarble(input));
+    expect(ungarble.explain(input, options)).toEqual(ungarble.explain(input));
+  });
+
+  it("uses default normalization when explicitly undefined", () => {
+    expect(ungarble("e\u0301", { normalization: undefined })).toBe("é");
+  });
+
   it.each(cases)("only applies the enabled %s fixer", (option, input, expected) => {
     expect(ungarble(input, disabled)).toBe(input);
     const options = { ...disabled, [option]: true };

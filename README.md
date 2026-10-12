@@ -23,7 +23,7 @@ npm install ungarble
 
 ## What it does
 
-When text is read with the wrong character encoding, you get mojibake. Characters like `é` turn into `Ã©`, and `'` turns into `â€™`. This happens constantly in data pipelines, web scraping, databases, and file imports.
+When text is read with the wrong character encoding, you get mojibake. Characters like `é` turn into `Ã©`, and `’` turns into `â€™`. This happens constantly in data pipelines, web scraping, databases, and file imports.
 
 **ungarble** detects which encoding error occurred and reverses it:
 
@@ -41,7 +41,7 @@ Takes garbled text and returns fixed text.
 ```ts
 ungarble("cafÃ©")  // -> "café"
 ungarble("The Mona Lisa doesnÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢t have eyebrows.")
-  // -> "The Mona Lisa doesn't have eyebrows." (triple encoding fixed)
+  // -> "The Mona Lisa doesn’t have eyebrows." (triple encoding fixed)
 ```
 
 ### `ungarble.detect(text)` / `ungarble.score(text)`
@@ -117,7 +117,7 @@ For untrusted input, set `limit` (UTF-16 code units; unlimited by default). The 
 | Original encoding | Misread as | Example |
 |---|---|---|
 | UTF-8 | Latin-1 / Windows-1252 | `cafÃ©` -> `café` |
-| UTF-8 | Windows-1251 (Cyrillic) | `вЂ"` -> `–` |
+| UTF-8 | Windows-1251 (Cyrillic) | `вЂ“` -> `–` |
 | UTF-8 | Windows-1250 (Central European) | `ÄŒeÅ¡tina` -> `Čeština` |
 | UTF-8 | Windows-1253 (Greek) | `Ελληνικά` encoding fixes |
 | UTF-8 | Windows-1254 (Turkish) | `Ä°stanbul` -> `İstanbul` |

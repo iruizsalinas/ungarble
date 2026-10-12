@@ -31,4 +31,12 @@ describe("browser build", () => {
     expect(ungarble(input, options)).toBe("😀 cafe\u0301\n");
     expect(ungarble.explain(input, options).text).toBe(ungarble(input, options));
   });
+
+  it("repairs cleanup interactions and keeps explicit undefined defaults", () => {
+    const input = "cafÃ\0©\n\x1b]title\ncontinued\x1b\\done";
+    for (const chunk of [1, 7, 14, 1_000_000]) {
+      expect(ungarble(input, { chunk, encoding: undefined })).toBe("café\ndone");
+      expect(ungarble.explain(input, { chunk }).text).toBe("café\ndone");
+    }
+  });
 });
