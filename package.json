@@ -1,6 +1,7 @@
 {
   "name": "ungarble",
-  "version": "1.0.4",
+  "version": "1.0.5",
+  "private": true,
   "description": "Fix garbled text from encoding errors",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -23,16 +24,17 @@
   ],
   "scripts": {
     "build": "tsdown",
+    "package": "npm run build && npm run package:prepare",
+    "package:prepare": "node scripts/package.mjs",
     "test": "npm run build && npm run test:prepare && vitest run",
-    "test:prepare": "node scripts/prepare-runtime-tests.mjs",
+    "test:prepare": "npm run package:prepare && node scripts/prepare-runtime-tests.mjs",
     "test:node": "vitest run --project node",
     "test:browser": "vitest run --project browser",
     "test:workers": "vitest run --config vitest.workers.config.ts",
     "test:runtime": "node scripts/run-runtime-tests.mjs",
     "test:package-types": "tsc --ignoreConfig --strict --noEmit --module NodeNext --moduleResolution NodeNext --target ES2022 --skipLibCheck .ci/consumer/typecheck.mts .ci/consumer/typecheck.cts",
     "test:watch": "vitest --project node",
-    "typecheck": "npm run build && tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
-    "prepublishOnly": "npm run build"
+    "typecheck": "npm run build && tsc --noEmit && tsc --noEmit -p tsconfig.test.json"
   },
   "keywords": [
     "mojibake",

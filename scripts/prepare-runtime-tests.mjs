@@ -9,10 +9,9 @@ const root = fileURLToPath(new URL("../", import.meta.url));
 const consumer = resolve(root, ".ci/consumer");
 await mkdir(consumer, { recursive: true });
 const npm = (...args) => execFileSync(process.execPath, [process.env.npm_execpath, ...args, "--cache", resolve(root, ".ci/npm-cache")], { stdio: "inherit", cwd: root });
-npm("pack", "--pack-destination", ".ci", "--ignore-scripts");
-const { version } = JSON.parse(await readFile(resolve(root, "package.json"), "utf8"));
+const { filename } = JSON.parse(await readFile(resolve(root, ".ci/package-artifact.json"), "utf8"));
 await writeFile(resolve(consumer, "package.json"), JSON.stringify({ private: true, type: "module" }));
-npm("install", "--prefix", consumer, "--ignore-scripts", "--no-audit", "--no-fund", resolve(root, `.ci/ungarble-${version}.tgz`));
+npm("install", "--prefix", consumer, "--ignore-scripts", "--no-audit", "--no-fund", resolve(root, ".ci", filename));
 
 async function tests(dir) {
   const entries = await readdir(resolve(root, dir), { withFileTypes: true });
