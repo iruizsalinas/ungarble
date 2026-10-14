@@ -23,7 +23,13 @@
   ],
   "scripts": {
     "build": "tsdown",
-    "test": "npm run build && vitest run",
+    "test": "npm run build && npm run test:prepare && vitest run",
+    "test:prepare": "node scripts/prepare-runtime-tests.mjs",
+    "test:node": "vitest run --project node",
+    "test:browser": "vitest run --project browser",
+    "test:workers": "vitest run --config vitest.workers.config.ts",
+    "test:runtime": "node scripts/run-runtime-tests.mjs",
+    "test:package-types": "tsc --ignoreConfig --strict --noEmit --module NodeNext --moduleResolution NodeNext --target ES2022 --skipLibCheck .ci/consumer/typecheck.mts .ci/consumer/typecheck.cts",
     "test:watch": "vitest --project node",
     "typecheck": "npm run build && tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
     "prepublishOnly": "npm run build"
@@ -48,9 +54,14 @@
     "node": ">=18"
   },
   "devDependencies": {
+    "@cloudflare/vitest-plugin": "1.4.2",
     "@types/node": "25.6.0",
     "@vitest/browser-playwright": "4.1.11",
-    "playwright": "1.62.1",
+    "@vitest/expect": "4.1.11",
+    "chai": "6.3.0",
+    "esbuild": "0.28.2",
+    "expect-type": "1.4.0",
+    "playwright": "1.64.1",
     "tsdown": "0.22.2",
     "typescript": "6.0.2",
     "vitest": "4.1.11"

@@ -76,7 +76,7 @@ describe("cross-ecosystem regressions", () => {
       const original = windows1252.decode(Uint8Array.of(byte));
       mojibake.push(
         windows1252.decode(new TextEncoder().encode(original)),
-        Buffer.from(original, "utf8").toString("latin1"),
+        Array.from(new TextEncoder().encode(original), byte => String.fromCharCode(byte)).join(""),
       );
     }
 

@@ -1,15 +1,12 @@
-import { createRequire } from "node:module";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import * as esm from "../../../dist/index.js";
 import { ungarble, type UngarbleConfig, type FixResult, type ExplanationStep } from "../../../src/index.js";
 
 describe("public package contract", () => {
-  it("exports only the documented runtime API in ESM and CommonJS", () => {
-    const cjs = createRequire(import.meta.url)("../../../dist/index.cjs");
+  it("exports only the documented runtime API", () => {
     expect(Object.keys(esm)).toEqual(["ungarble"]);
-    expect(Object.keys(cjs)).toEqual(["ungarble"]);
     const methods = ["explain", "encoding", "detect", "score", "html", "quotes", "ligatures", "width", "lines", "surrogates", "escapes", "controls", "c1"].sort();
-    for (const api of [ungarble, esm.ungarble, cjs.ungarble]) {
+    for (const api of [ungarble, esm.ungarble]) {
       expect(Object.keys(api).sort()).toEqual(methods);
       expect(api("cafÃ©")).toBe("café");
       expect(api.explain("cafÃ©")).toEqual({ text: "café", steps: [
