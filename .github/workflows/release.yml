@@ -71,7 +71,7 @@ jobs:
         shell: bash
         run: |
           shopt -s nullglob
-          packages=(release/*.tgz)
+          packages=(./release/*.tgz)
           if [ "${#packages[@]}" -ne 1 ]; then
             echo 'Expected exactly one tested npm tarball'
             exit 1
